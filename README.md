@@ -33,10 +33,19 @@ uv run novel2script outline runs/demo
 uv run novel2script generate runs/demo --title 第七页 --author 示例作者
 uv run novel2script draft-scenes runs/demo --provider mock
 uv run novel2script validate runs/demo
+uv run novel2script check runs/demo
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
 
 完整运行后，最终剧本初稿会写入 `runs/demo/output/screenplay.yaml`。
+
+`check` 对生成的剧本做故事级一致性检查（确定性、离线），并把发现写入 `quality_report.warnings`，供作者复核：
+
+- `CHAPTER_NOT_ADAPTED`：某章节未被任何场景改编（可能遗漏剧情）。
+- `CHARACTER_UNUSED`：人物已登记但从未出场。
+- `CHARACTER_NO_DIALOGUE`：人物在场却全程没有台词。
+
+写入的发现仍满足剧本 JSON Schema，`check` 后再 `validate` 依然通过。
 
 ## DeepSeek Provider 配置
 
