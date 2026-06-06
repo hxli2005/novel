@@ -29,6 +29,7 @@ uv run novel2script parse examples/novels/three_chapters.txt --out runs/demo
 uv run novel2script analyze runs/demo
 uv run novel2script outline runs/demo
 uv run novel2script generate runs/demo --title 第七页 --author 示例作者
+uv run novel2script validate runs/demo
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
 
@@ -36,5 +37,5 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 ## 下一步建议
 
-1. 实现 YAML Schema 校验与 ID 引用一致性检查。
+1. 接入 LLM Provider 与逐场剧本扩写 Prompt。
 2. 按 PR 规范拆分为多个小功能逐步提交。
