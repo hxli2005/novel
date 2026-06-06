@@ -13,6 +13,7 @@ from novel_to_screenplay.providers import (
     ProviderCompletion,
     ProviderError,
 )
+from novel_to_screenplay.structured_output import StructuredOutputError, extract_json_value
 
 SUPPORTED_SCRIPT_TYPES = {"action", "dialogue", "note", "transition"}
 
@@ -165,12 +166,9 @@ def build_scene_prompt(
 def parse_script_json(completion: ProviderCompletion) -> Any:
     """Parse provider completion as a JSON array."""
 
-    text = completion.text.strip()
-    if text.startswith("```"):
-        text = strip_code_fence(text)
     try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
+        parsed = extract_json_value(completion.text)
+    except StructuredOutputError as exc:
         raise SceneDraftError("provider did not return a valid JSON script array.") from exc
     if not isinstance(parsed, list):
         raise SceneDraftError("provider script response must be a JSON array.")
@@ -360,12 +358,3 @@ def summarize_character(character: dict[str, Any]) -> dict[str, Any]:
         "motivation": character.get("motivation", ""),
         "voice": character.get("voice", ""),
     }
-
-
-def strip_code_fence(text: str) -> str:
-    """Remove a Markdown code fence from a provider response."""
-
-    lines = text.splitlines()
-    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
-        return "\n".join(lines[1:-1]).strip()
-    return text
