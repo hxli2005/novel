@@ -45,8 +45,11 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 export DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 export DEEPSEEK_MODEL=deepseek-v4-pro
 export DEEPSEEK_BASE_URL=https://api.deepseek.com
+export DEEPSEEK_THINKING=disabled
 uv run novel2script check-provider --provider deepseek
 ```
+
+`DEEPSEEK_THINKING` 默认为 `disabled`，用于让连通性检查和后续剧本扩写直接返回 `content`。如需开启 DeepSeek thinking mode，可设为 `enabled`，但需要为推理内容预留更高 `max_tokens`。
 
 当前版本先完成 provider 抽象和连通性检查；规则型剧本生成仍可离线运行。下一步会把 DeepSeek 接入逐场剧本扩写。
 

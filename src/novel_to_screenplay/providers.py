@@ -14,6 +14,7 @@ SUPPORTED_PROVIDER_NAMES = ("mock", "deepseek")
 
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEFAULT_DEEPSEEK_THINKING = "disabled"
 
 Transport = Callable[[urllib.request.Request, float], bytes]
 
@@ -105,6 +106,7 @@ class DeepSeekProvider:
         api_key: str,
         model: str = DEFAULT_DEEPSEEK_MODEL,
         base_url: str = DEFAULT_DEEPSEEK_BASE_URL,
+        thinking: str = DEFAULT_DEEPSEEK_THINKING,
         timeout_sec: float = 60,
         transport: Transport | None = None,
     ) -> None:
@@ -115,6 +117,7 @@ class DeepSeekProvider:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
+        self.thinking = normalize_thinking(thinking)
         self.timeout_sec = timeout_sec
         self.transport = transport or default_transport
 
@@ -127,6 +130,7 @@ class DeepSeekProvider:
             api_key=env.get("DEEPSEEK_API_KEY", ""),
             model=env.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL),
             base_url=env.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL),
+            thinking=env.get("DEEPSEEK_THINKING", DEFAULT_DEEPSEEK_THINKING),
         )
 
     def complete(
@@ -141,6 +145,9 @@ class DeepSeekProvider:
         payload = {
             "model": self.model,
             "messages": [message_to_payload(message) for message in messages],
+            "thinking": {
+                "type": self.thinking,
+            },
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -214,7 +221,8 @@ def get_provider_statuses(env: Mapping[str, str] | None = None) -> list[Provider
             configured=bool(env.get("DEEPSEEK_API_KEY")),
             detail=(
                 f"model={env.get('DEEPSEEK_MODEL', DEFAULT_DEEPSEEK_MODEL)}, "
-                f"base_url={env.get('DEEPSEEK_BASE_URL', DEFAULT_DEEPSEEK_BASE_URL)}"
+                f"base_url={env.get('DEEPSEEK_BASE_URL', DEFAULT_DEEPSEEK_BASE_URL)}, "
+                f"thinking={env.get('DEEPSEEK_THINKING', DEFAULT_DEEPSEEK_THINKING)}"
             ),
         ),
     ]
@@ -229,6 +237,17 @@ def message_to_payload(message: ChatMessage) -> dict[str, str]:
         "role": message.role,
         "content": message.content,
     }
+
+
+def normalize_thinking(value: str) -> str:
+    """Normalize DeepSeek thinking mode configuration."""
+
+    normalized = value.strip().lower()
+    if normalized not in {"enabled", "disabled"}:
+        raise MissingProviderConfigError(
+            "DEEPSEEK_THINKING must be either 'enabled' or 'disabled'."
+        )
+    return normalized
 
 
 def parse_json_response(response_body: bytes) -> dict[str, Any]:
