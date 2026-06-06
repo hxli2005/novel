@@ -19,7 +19,7 @@ def test_status_command() -> None:
     result = runner.invoke(app, ["status"])
 
     assert result.exit_code == 0
-    assert "CLI skeleton is ready" in result.stdout
+    assert "pipeline is ready through chapter and entity analysis" in result.stdout
 
 
 def test_run_dry_run_validates_input_without_creating_workspace(tmp_path: Path) -> None:
@@ -37,9 +37,18 @@ def test_run_dry_run_validates_input_without_creating_workspace(tmp_path: Path) 
     assert not output_dir.exists()
 
 
-def test_run_initializes_workspace_and_stages_source(tmp_path: Path) -> None:
+def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     source = tmp_path / "novel.md"
-    source.write_text("# 第一章\n故事开始。", encoding="utf-8")
+    source.write_text(
+        "\n\n".join(
+            [
+                "# 第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "# 第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "# 第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
     output_dir = tmp_path / "run"
 
     result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
@@ -50,6 +59,12 @@ def test_run_initializes_workspace_and_stages_source(tmp_path: Path) -> None:
     )
     assert (output_dir / "intermediates").is_dir()
     assert (output_dir / "index").is_dir()
+    assert (output_dir / "intermediates" / "parsed_chapters.yaml").is_file()
+    assert (output_dir / "intermediates" / "chapter_analysis.yaml").is_file()
+    assert (output_dir / "intermediates" / "characters.yaml").is_file()
+    assert (output_dir / "intermediates" / "locations.yaml").is_file()
+    assert "Parsed chapters: 3" in result.stdout
+    assert "Analyzed chapters: 3" in result.stdout
 
 
 def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:

@@ -60,7 +60,7 @@ def root(
 def status() -> None:
     """Print the current CLI readiness status."""
 
-    console.print("novel2script CLI skeleton is ready.")
+    console.print("novel2script pipeline is ready through chapter and entity analysis.")
 
 
 @app.command()
@@ -87,11 +87,7 @@ def run(
         typer.Option("--dry-run", help="Validate inputs without writing output files."),
     ] = False,
 ) -> None:
-    """Initialize a conversion run workspace.
-
-    The real conversion pipeline will be implemented in later PRs. This command
-    establishes the stable CLI contract and validates the input path.
-    """
+    """Run the available local conversion pipeline stages."""
 
     input_path = _validate_input_path(input_path)
 
@@ -103,8 +99,23 @@ def run(
 
     layout = initialize_workspace(out)
     staged_path = stage_source_file(input_path, layout)
+    try:
+        chapters = parse_chapters_file(staged_path)
+    except ChapterParseError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    parsed_chapters_path = layout.intermediates_dir / "parsed_chapters.yaml"
+    write_parsed_chapters_yaml(chapters, parsed_chapters_path)
+
+    analysis = analyze_chapters(chapters)
+    write_entity_analysis_outputs(analysis, layout.intermediates_dir)
+
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
+    console.print(f"Parsed chapters: {len(chapters)}")
+    console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
+    console.print(f"Extracted characters: {len(analysis.characters)}")
+    console.print(f"Extracted locations: {len(analysis.locations)}")
     console.print(f"Provider: {provider}")
 
 
