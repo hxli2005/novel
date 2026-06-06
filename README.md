@@ -57,6 +57,12 @@ uv run novel2script run path/to/novel.txt --out runs/demo --provider deepseek
 - `CHARACTER_UNUSED`：人物已登记但从未出场。
 - `CHARACTER_NO_DIALOGUE`：人物在场却全程没有台词。
 
+配置 DeepSeek 后用 `check --provider deepseek`，会在确定性检查之外**追加 LLM 故事级复审**：伏笔是否回收（`FORESHADOW_UNRESOLVED`）、人物弧光是否连贯（`ARC_INCONSISTENCY`）、跨场因果是否成立（`CAUSALITY_GAP`）。模型返回异常时静默跳过，不影响确定性结果。
+
+```bash
+uv run novel2script check runs/demo --provider deepseek
+```
+
 写入的发现仍满足剧本 JSON Schema，`check` 后再 `validate` 依然通过。
 
 ## 改编参数
