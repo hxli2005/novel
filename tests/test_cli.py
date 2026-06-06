@@ -60,3 +60,39 @@ def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "input file must use one of" in result.output
+
+
+def test_parse_command_writes_parsed_chapters_yaml(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 开端\n主角发现线索。",
+                "第二章 调查\n主角进入旧楼。",
+                "第三章 揭露\n真相浮出水面。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    result = runner.invoke(app, ["parse", str(source), "--out", str(output_dir)])
+
+    assert result.exit_code == 0
+    parsed = output_dir / "intermediates" / "parsed_chapters.yaml"
+    assert parsed.is_file()
+    parsed_text = parsed.read_text(encoding="utf-8")
+    assert "Parsed chapters: 3" in result.stdout
+    assert 'id: "ch_001"' in parsed_text
+    assert 'title: "第一章 开端"' in parsed_text
+    assert "sha256:" in parsed_text
+
+
+def test_parse_command_rejects_fewer_than_three_chapters(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text("第一章 开端\n内容。\n\n第二章 继续\n内容。", encoding="utf-8")
+
+    result = runner.invoke(app, ["parse", str(source), "--out", str(tmp_path / "run")])
+
+    assert result.exit_code != 0
+    assert "At least 3 chapters are required" in result.output
