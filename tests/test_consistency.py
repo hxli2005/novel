@@ -79,3 +79,14 @@ def test_apply_consistency_findings_updates_quality_report() -> None:
     assert len(warnings) == len(findings)
     assert document["quality_report"]["validation_status"] == "warning"
     assert all("code" in warning and "message" in warning for warning in warnings)
+
+
+def test_apply_consistency_findings_is_idempotent() -> None:
+    document = build_document()
+    findings = analyze_consistency(document)
+
+    apply_consistency_findings(document, findings)
+    apply_consistency_findings(document, findings)
+
+    warnings = document["quality_report"]["warnings"]
+    assert len(warnings) == len(findings)

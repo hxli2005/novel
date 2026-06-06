@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 DIALOGUE_TYPES = {"dialogue", "voiceover"}
+WarningIdentity = tuple[str, str, str | None]
 
 
 @dataclass(frozen=True)
@@ -124,15 +125,41 @@ def apply_consistency_findings(
         warnings = []
         report["warnings"] = warnings
 
+    existing_warning_ids = {
+        warning_id for warning in warnings if (warning_id := _warning_identity(warning)) is not None
+    }
     for finding in findings:
-        warning: dict[str, Any] = {"code": finding.code, "message": finding.message}
-        if finding.scene_id:
-            warning["scene_id"] = finding.scene_id
+        warning = _finding_to_warning(finding)
+        warning_id = _warning_identity(warning)
+        if warning_id in existing_warning_ids:
+            continue
         warnings.append(warning)
+        existing_warning_ids.add(warning_id)
 
     if findings and report.get("validation_status") == "pass":
         report["validation_status"] = "warning"
     return document
+
+
+def _finding_to_warning(finding: ConsistencyFinding) -> dict[str, Any]:
+    warning: dict[str, Any] = {"code": finding.code, "message": finding.message}
+    if finding.scene_id:
+        warning["scene_id"] = finding.scene_id
+    return warning
+
+
+def _warning_identity(warning: Any) -> WarningIdentity | None:
+    if not isinstance(warning, dict):
+        return None
+
+    code = warning.get("code")
+    message = warning.get("message")
+    scene_id = warning.get("scene_id")
+    if not isinstance(code, str) or not isinstance(message, str):
+        return None
+    if scene_id is not None and not isinstance(scene_id, str):
+        return None
+    return (code, message, scene_id)
 
 
 def _scenes(document: dict[str, Any]) -> list[dict[str, Any]]:
