@@ -1,0 +1,501 @@
+schema_version: "screenplay_yaml/v0.1"
+metadata:
+  title: "第七页"
+  author: "示例作者"
+  language: "zh-CN"
+  created_at: "2026-06-06T10:00:00+08:00"
+  generator:
+    name: "novel-to-screenplay"
+    version: "0.1.0"
+  rights:
+    source_copyright_owner: "示例作者"
+    adaptation_notes: "示例输出，仅作为结构化剧本初稿。"
+source:
+  source_type: "novel"
+  original_title: "第七页"
+  chapter_count: 3
+  chapters:
+    - id: "ch_001"
+      order: 1
+      title: "第一章 档案室的缺页"
+      word_count: 456
+      text_hash: "sha256:example-ch-001"
+      summary: "林青在医院档案室发现父亲病历第七页缺失，并从周叔手中得到旧楼药品库钥匙。"
+    - id: "ch_002"
+      order: 2
+      title: "第二章 旧楼的钥匙"
+      word_count: 420
+      text_hash: "sha256:example-ch-002"
+      summary: "林青进入旧楼药品库，找到值班表和录音笔，确认父亲留下了证据。"
+    - id: "ch_003"
+      order: 3
+      title: "第三章 天台上的名字"
+      word_count: 426
+      text_hash: "sha256:example-ch-003"
+      summary: "周叔解释当年事件，赵岚现身施压，林青触发录音笔揭露顾明远换药。"
+adaptation:
+  target_format: "screenplay"
+  target_runtime_min: 8
+  episode:
+    mode: "single"
+    number: null
+  strategy:
+    fidelity: "balanced"
+    pacing: "compressed"
+    dialogue_style: "natural"
+    narration_policy: "convert_to_action_or_dialogue"
+  assumptions:
+    - "将小说中的调查过程压缩为三场主要戏。"
+    - "保留病历第七页、铜钥匙、录音笔作为贯穿道具。"
+  human_review_required: true
+story_world:
+  logline: "一名医生追查父亲旧案，发现缺失病历背后隐藏着医院换药真相。"
+  synopsis: "林青在医院档案室发现父亲病历第七页被撕走。周叔警告她停止调查，却交给她旧楼药品库钥匙。林青在药品库找到值班表和录音笔，确认父亲生前留下证据。当晚，周叔在天台说出当年换药疑云，赵岚突然现身。林青说出顾明远的名字，录音笔播放出父亲指证顾明远换药的声音。"
+  themes:
+    - "真相"
+    - "亲情"
+    - "制度掩盖"
+  setting:
+    time_period: "现代"
+    primary_places:
+      - "江城第三医院"
+  timeline_notes:
+    - "三章剧情发生在连续两天内。"
+characters:
+  - id: "char_lin_qing"
+    name: "林青"
+    aliases:
+      - "林医生"
+    role: "protagonist"
+    age: "30岁左右"
+    description: "江城第三医院医生，冷静克制，正在追查父亲死亡真相。"
+    motivation: "查清父亲手术旧案，并找到病历第七页背后的证据。"
+    arc: "从偷偷核对档案，到主动在天台触发证据。"
+    voice: "短句多，情绪压在动作和停顿里。"
+    first_appearance:
+      chapter_id: "ch_001"
+    source_refs:
+      - chapter_id: "ch_001"
+        note: "档案室首次出场"
+  - id: "char_zhou_shu"
+    name: "周叔"
+    aliases:
+      - "老保安"
+    role: "supporting"
+    age: "60岁左右"
+    description: "医院老保安，知道旧案部分真相。"
+    motivation: "保护林青，同时补偿当年沉默。"
+    arc: "从警告林青停止调查，到在天台说出关键线索。"
+    voice: "话少，常用警告代替解释。"
+    first_appearance:
+      chapter_id: "ch_001"
+    source_refs:
+      - chapter_id: "ch_001"
+        note: "交给林青铜钥匙"
+      - chapter_id: "ch_003"
+        note: "解释旧案"
+  - id: "char_zhao_lan"
+    name: "赵岚"
+    role: "antagonist"
+    age: "35岁左右"
+    description: "顾明远的助理，负责追查林青是否拿到证据。"
+    motivation: "阻止林青公开旧案真相。"
+    arc: "从暗中搜查旧楼，到在天台正面施压。"
+    voice: "平静、精确，带压迫感。"
+    first_appearance:
+      chapter_id: "ch_002"
+    source_refs:
+      - chapter_id: "ch_002"
+        note: "旧楼搜查"
+      - chapter_id: "ch_003"
+        note: "天台现身"
+  - id: "char_gu_mingyuan"
+    name: "顾明远"
+    role: "antagonist"
+    age: "未知"
+    description: "当年手术主刀医生，被录音指认为换药者。"
+    motivation: "掩盖当年的医疗造假。"
+    arc: "前三章未直接出场，但通过值班表、赵岚和录音成为核心威胁。"
+    voice: "未出场，无直接对白。"
+    first_appearance:
+      chapter_id: "ch_002"
+    source_refs:
+      - chapter_id: "ch_002"
+        note: "值班表中出现名字"
+      - chapter_id: "ch_003"
+        note: "录音指证"
+  - id: "char_lin_father"
+    name: "林青父亲"
+    role: "minor"
+    age: "未知"
+    description: "林青已故父亲，当年发现顾明远伪造药品记录，并留下录音证据。"
+    motivation: "在出事前把证据留给林青。"
+    arc: "前三章通过录音出现，推动林青确认真相。"
+    voice: "录音中声音断续，但信息直接。"
+    first_appearance:
+      chapter_id: "ch_002"
+    source_refs:
+      - chapter_id: "ch_002"
+        note: "录音笔中首次出现声音"
+      - chapter_id: "ch_003"
+        note: "录音指证顾明远换药"
+locations:
+  - id: "loc_archive_room"
+    name: "医院档案室"
+    type: "interior"
+    visual_description: "夜晚的档案室，顶灯昏暗，铁柜密集，走廊外有清洁声。"
+    recurring: false
+    source_refs:
+      - chapter_id: "ch_001"
+        note: "第一场主要地点"
+  - id: "loc_old_pharmacy"
+    name: "旧楼地下药品库"
+    type: "interior"
+    visual_description: "停用旧楼的地下药品库，货架积灰，侧门由铜钥匙打开。"
+    recurring: false
+    source_refs:
+      - chapter_id: "ch_002"
+        note: "第二场主要地点"
+  - id: "loc_rooftop"
+    name: "住院楼天台"
+    type: "exterior"
+    visual_description: "夜晚天台风大，楼顶积水映着城市霓虹。"
+    recurring: false
+    source_refs:
+      - chapter_id: "ch_003"
+        note: "第三场主要地点"
+structure:
+  acts:
+    - id: "act_1"
+      title: "发现缺页"
+      scene_ids:
+        - "sc_001"
+    - id: "act_2"
+      title: "找到录音"
+      scene_ids:
+        - "sc_002"
+    - id: "act_3"
+      title: "天台揭露"
+      scene_ids:
+        - "sc_003"
+  key_events:
+    - id: "evt_001"
+      summary: "林青发现父亲病历第七页缺失。"
+      chapter_refs:
+        - "ch_001"
+      scene_ids:
+        - "sc_001"
+      causal_links:
+        - "evt_002"
+    - id: "evt_002"
+      summary: "周叔交给林青旧楼药品库钥匙。"
+      chapter_refs:
+        - "ch_001"
+      scene_ids:
+        - "sc_001"
+      causal_links:
+        - "evt_003"
+    - id: "evt_003"
+      summary: "林青在药品库找到值班表和录音笔。"
+      chapter_refs:
+        - "ch_002"
+      scene_ids:
+        - "sc_002"
+      causal_links:
+        - "evt_004"
+    - id: "evt_004"
+      summary: "林青在天台触发录音，听到父亲指证顾明远。"
+      chapter_refs:
+        - "ch_003"
+      scene_ids:
+        - "sc_003"
+      causal_links: []
+  omitted_material:
+    - chapter_id: "ch_002"
+      reason: "旧楼搜查过程被压缩，保留发现铁盒和赵岚搜查两个关键信息。"
+scenes:
+  - id: "sc_001"
+    order: 1
+    chapter_refs:
+      - "ch_001"
+    scene_heading:
+      location_mode: "INT"
+      location_id: "loc_archive_room"
+      display: "江城第三医院档案室"
+      time_of_day: "NIGHT"
+    summary: "林青发现父亲病历第七页缺失，周叔警告她并交出旧楼钥匙。"
+    dramatic_function: "inciting_incident"
+    estimated_screen_time_sec: 150
+    characters_present:
+      - "char_lin_qing"
+      - "char_zhou_shu"
+    props:
+      - "缺页病历"
+      - "铜钥匙"
+    beats:
+      - id: "beat_001"
+        summary: "林青在档案柜中找到父亲旧病历。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "档案室翻找病历"
+      - id: "beat_002"
+        summary: "她发现第七页被撕走。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "病历缺页"
+      - id: "beat_003"
+        summary: "周叔警告她停止调查，却交给她旧楼钥匙。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "周叔交出铜钥匙"
+    script:
+      - type: "action"
+        text: "档案室的顶灯轻轻闪动。林青戴着手套，抽出一份泛黄病历。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "档案室环境和动作改写"
+      - type: "action"
+        text: "她翻到第七页的位置，指尖停住。纸边被撕得很整齐。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "第七页缺失"
+      - type: "dialogue"
+        character_id: "char_zhou_shu"
+        character_name: "周叔"
+        parenthetical: "压低声音"
+        text: "别再查了，你父亲那台手术，不是你能碰的事。"
+        subtext: "他知道真相，但仍害怕被牵连。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "周叔原文警告"
+      - type: "dialogue"
+        character_id: "char_lin_qing"
+        character_name: "林青"
+        text: "是谁撕走了第七页？"
+        subtext: "她已经确认父亲旧案被人为掩盖。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "由追问病历缺页改写"
+      - type: "action"
+        text: "周叔没有回答。他把一枚生锈的铜钥匙塞进林青掌心。"
+        source_refs:
+          - chapter_id: "ch_001"
+            note: "交出铜钥匙"
+      - type: "transition"
+        text: "CUT TO:"
+    continuity:
+      previous_scene_id: null
+      next_scene_id: "sc_002"
+      open_questions:
+        - "电话中的人是否为赵岚或顾明远安排的人？"
+    revision_status: "ai_draft"
+  - id: "sc_002"
+    order: 2
+    chapter_refs:
+      - "ch_002"
+    scene_heading:
+      location_mode: "INT"
+      location_id: "loc_old_pharmacy"
+      display: "旧楼地下药品库"
+      time_of_day: "DAY"
+    summary: "林青用铜钥匙打开药品库，找到值班表和录音笔，并听见父亲留下的线索。"
+    dramatic_function: "discovery"
+    estimated_screen_time_sec: 180
+    characters_present:
+      - "char_lin_qing"
+      - "char_zhao_lan"
+    props:
+      - "铜钥匙"
+      - "铁盒"
+      - "值班表"
+      - "录音笔"
+    beats:
+      - id: "beat_004"
+        summary: "铜钥匙打开旧楼药品库侧门。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "进入旧楼"
+      - id: "beat_005"
+        summary: "林青找到贴着手术编号的铁盒。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "发现铁盒"
+      - id: "beat_006"
+        summary: "录音笔播放父亲的断续留言。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "录音笔内容"
+      - id: "beat_007"
+        summary: "赵岚带人进入旧楼搜查。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "赵岚现身"
+    script:
+      - type: "action"
+        text: "铜钥匙插进锁孔，转动时发出涩响。药品库的门开了一条缝。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "铜钥匙打开侧门"
+      - type: "action"
+        text: "林青在货架后拖出铁盒。盒盖上，是父亲当年的手术编号。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "发现铁盒"
+      - type: "action"
+        text: "铁盒里躺着一张值班表和一支录音笔。顾明远的名字被红笔圈住。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "值班表和录音笔"
+      - type: "voiceover"
+        character_id: "char_lin_father"
+        character_name: "林青父亲"
+        text: "如果我出事，把第七页交给林青。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "录音笔播放内容"
+      - type: "action"
+        text: "楼上传来脚步声。林青关掉录音笔，躲进药品柜后。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "赵岚到来前动作"
+      - type: "dialogue"
+        character_id: "char_zhao_lan"
+        character_name: "赵岚"
+        text: "东西不在这里，她已经拿走了。"
+        subtext: "赵岚确认林青已取得关键证据。"
+        source_refs:
+          - chapter_id: "ch_002"
+            note: "赵岚原文对白"
+      - type: "transition"
+        text: "CUT TO:"
+    continuity:
+      previous_scene_id: "sc_001"
+      next_scene_id: "sc_003"
+      open_questions:
+        - "录音笔为什么需要顾明远的名字才能继续播放？"
+    revision_status: "ai_draft"
+  - id: "sc_003"
+    order: 3
+    chapter_refs:
+      - "ch_003"
+    scene_heading:
+      location_mode: "EXT"
+      location_id: "loc_rooftop"
+      display: "住院楼天台"
+      time_of_day: "NIGHT"
+    summary: "周叔说出旧案经过，赵岚现身施压，林青用顾明远的名字触发录音笔。"
+    dramatic_function: "payoff"
+    estimated_screen_time_sec: 210
+    characters_present:
+      - "char_lin_qing"
+      - "char_zhou_shu"
+      - "char_zhao_lan"
+    props:
+      - "录音笔"
+      - "林青遗落的手套"
+    beats:
+      - id: "beat_008"
+        summary: "周叔承认当年顾明远伪造药品记录。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "周叔解释旧案"
+      - id: "beat_009"
+        summary: "赵岚拿着林青遗落的手套出现。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "赵岚天台现身"
+      - id: "beat_010"
+        summary: "林青说出顾明远的名字，录音笔播放关键证词。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "录音笔揭示真相"
+    script:
+      - type: "action"
+        text: "天台风声很重。楼顶积水里，霓虹被吹成细碎的光。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "天台环境"
+      - type: "dialogue"
+        character_id: "char_zhou_shu"
+        character_name: "周叔"
+        text: "你父亲发现顾明远伪造药品记录。手术前夜，有人换掉了关键药。"
+        subtext: "他终于把隐瞒多年的真相说出口。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "周叔解释旧案"
+      - type: "dialogue"
+        character_id: "char_lin_qing"
+        character_name: "林青"
+        text: "第七页在哪？"
+        subtext: "她需要能公开指证的证据。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "追问第七页"
+      - type: "dialogue"
+        character_id: "char_zhou_shu"
+        character_name: "周叔"
+        text: "真正的第七页不是纸，是你手里的录音。"
+        subtext: "病历缺页的伏笔被转化为录音证据。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "解释隐藏录音"
+      - type: "action"
+        text: "楼梯间的门被推开。赵岚走上天台，手里捏着林青遗落的手套。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "赵岚出现"
+      - type: "dialogue"
+        character_id: "char_zhao_lan"
+        character_name: "赵岚"
+        text: "林医生，顾主任想见你。"
+        subtext: "她用平静语气发出威胁。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "赵岚原文对白"
+      - type: "action"
+        text: "林青没有后退。她按下录音笔。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "林青触发录音笔"
+      - type: "dialogue"
+        character_id: "char_lin_qing"
+        character_name: "林青"
+        text: "顾明远。"
+        subtext: "她选择正面揭开真相。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "说出触发名字"
+      - type: "voiceover"
+        character_id: "char_lin_father"
+        character_name: "林青父亲"
+        text: "顾明远换了药。"
+        source_refs:
+          - chapter_id: "ch_003"
+            note: "录音笔揭示真相"
+    continuity:
+      previous_scene_id: "sc_002"
+      next_scene_id: null
+      open_questions:
+        - "录音公开后顾明远如何反击，留待后续章节展开。"
+    revision_status: "ai_draft"
+quality_report:
+  validation_status: "warning"
+  chapter_coverage:
+    - chapter_id: "ch_001"
+      used_in_scene_ids:
+        - "sc_001"
+      coverage_note: "第一章主要事件已覆盖。"
+    - chapter_id: "ch_002"
+      used_in_scene_ids:
+        - "sc_002"
+      coverage_note: "第二章主要事件已覆盖，旧楼搜索过程有压缩。"
+    - chapter_id: "ch_003"
+      used_in_scene_ids:
+        - "sc_003"
+      coverage_note: "第三章主要事件已覆盖。"
+  warnings:
+    - code: "SAMPLE_HASH"
+      message: "text_hash 为示例占位值，后续实现章节解析后应替换为真实 sha256。"
+  unresolved_questions:
+    - "顾明远是否需要在后续章节中直接出场。"
+    - "赵岚的个人动机需要在后续改编中补强。"
