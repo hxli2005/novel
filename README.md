@@ -7,6 +7,8 @@
 ## 已完成文档
 
 - [开发前研究与竞品分析](docs/pre-development-research.md)
+- [系统设计收束](docs/system-design.md)
+- [技术选型](docs/technology-selection.md)
 - [剧本 YAML Schema v0.1 设计说明](docs/script-yaml-schema.md)
 
 ## 本地运行
