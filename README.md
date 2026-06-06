@@ -1,12 +1,14 @@
 # 小说转剧本工具
 
-当前状态：开发前研究与 Schema 设计阶段。
+当前状态：开发前研究、系统设计、技术选型与 Schema 设计阶段。
 
 目标是开发一款 AI 辅助剧本创作工具，支持将 3 个章节以上的小说文本转换为可编辑的结构化剧本 YAML 初稿，帮助小说作者降低改编门槛。
 
 ## 已完成文档
 
 - [开发前研究与竞品分析](docs/pre-development-research.md)
+- [系统设计收束](docs/system-design.md)
+- [技术选型](docs/technology-selection.md)
 - [剧本 YAML Schema v0.1 设计说明](docs/script-yaml-schema.md)
 
 ## 示例
