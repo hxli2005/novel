@@ -110,7 +110,7 @@ def run(
     ] = Path("runs/demo"),
     provider: Annotated[
         str,
-        typer.Option("--provider", help="LLM provider name."),
+        typer.Option("--provider", help="LLM provider used to draft scene scripts."),
     ] = "mock",
     title: Annotated[
         str,
@@ -120,12 +120,20 @@ def run(
         str,
         typer.Option("--author", help="Author or adapter name written into metadata."),
     ] = "待填写",
+    max_tokens: Annotated[
+        int,
+        typer.Option("--max-tokens", min=1, help="Maximum tokens per drafted scene."),
+    ] = 2048,
+    schema: Annotated[
+        Path,
+        typer.Option("--schema", help="Path to the screenplay JSON Schema file."),
+    ] = Path("schemas/screenplay.schema.json"),
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Validate inputs without writing output files."),
     ] = False,
 ) -> None:
-    """Run the available local conversion pipeline stages."""
+    """Run the full pipeline: parse, analyze, outline, generate, draft, and validate."""
 
     input_path = _validate_input_path(input_path)
     provider = _validate_provider_name(provider)
@@ -160,6 +168,18 @@ def run(
     screenplay_path = layout.output_dir / "screenplay.yaml"
     write_screenplay_yaml(screenplay, screenplay_path)
 
+    try:
+        llm_provider = build_provider(provider)
+        draft_result = draft_screenplay_scenes(
+            screenplay,
+            llm_provider,
+            max_tokens=max_tokens,
+        )
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
+    write_screenplay_yaml(draft_result.document, screenplay_path)
+
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
     console.print(f"Parsed chapters: {len(chapters)}")
@@ -168,7 +188,23 @@ def run(
     console.print(f"Generated screenplay: {screenplay_path}")
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
-    console.print(f"Provider: {provider}")
+    console.print(f"Drafted scenes: {len(draft_result.drafted_scene_ids)}")
+    console.print(f"Provider: {draft_result.provider}")
+    console.print(f"Model: {draft_result.model}")
+
+    if not schema.is_file():
+        console.print(f"Validation skipped: schema file not found ({schema}).")
+        return
+
+    validation = validate_screenplay_file(screenplay_path, schema)
+    if validation.passed:
+        console.print(f"Validation passed: {screenplay_path}")
+        return
+
+    console.print(f"Validation failed: {len(validation.issues)} issue(s)")
+    for issue in validation.issues:
+        console.print(f"- {issue.code} {issue.path}: {issue.message}")
+    raise typer.Exit(1)
 
 
 @app.command("providers")
