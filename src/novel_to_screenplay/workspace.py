@@ -44,3 +44,14 @@ def stage_source_file(source_path: Path, layout: WorkspaceLayout) -> Path:
     staged_path = layout.input_dir / f"source{source_path.suffix.lower()}"
     copyfile(source_path, staged_path)
     return staged_path
+
+
+def find_staged_source_file(layout: WorkspaceLayout) -> Path:
+    """Return the staged source file from a workspace."""
+
+    candidates = sorted(layout.input_dir.glob("source.*"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"No staged source file found in {layout.input_dir}. Run novel2script parse first."
+        )
+    return candidates[0]
