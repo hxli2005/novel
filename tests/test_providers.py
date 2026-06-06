@@ -82,6 +82,9 @@ def test_deepseek_provider_sends_openai_compatible_chat_request() -> None:
                 "content": "确认连通。",
             },
         ],
+        "thinking": {
+            "type": "disabled",
+        },
         "temperature": 0.3,
         "max_tokens": 128,
     }
@@ -107,6 +110,7 @@ def test_get_provider_statuses_reports_deepseek_configuration() -> None:
         {
             "DEEPSEEK_API_KEY": "sk-test",
             "DEEPSEEK_MODEL": "deepseek-v4-flash",
+            "DEEPSEEK_THINKING": "enabled",
         }
     )
 
@@ -115,3 +119,9 @@ def test_get_provider_statuses_reports_deepseek_configuration() -> None:
     assert statuses[1].name == "deepseek"
     assert statuses[1].configured
     assert "deepseek-v4-flash" in statuses[1].detail
+    assert "thinking=enabled" in statuses[1].detail
+
+
+def test_deepseek_provider_rejects_invalid_thinking_mode() -> None:
+    with pytest.raises(MissingProviderConfigError):
+        DeepSeekProvider(api_key="sk-test", thinking="maybe")
