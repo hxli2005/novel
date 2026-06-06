@@ -136,6 +136,25 @@ def test_build_scene_outline_with_llm_falls_back_when_empty() -> None:
     assert [scene.id for scene in outline.scenes] == ["sc_001", "sc_002", "sc_003"]
 
 
+def test_build_scene_outline_with_llm_falls_back_on_malformed_response() -> None:
+    analysis = analyze_chapters(parse_chapters_file(FIXTURE))
+
+    class MalformedProvider:
+        name = "fake"
+        model = "fake-outline-model"
+
+        def complete(self, messages, *, temperature=0.2, max_tokens=2048):  # type: ignore[no-untyped-def]
+            del messages, temperature, max_tokens
+            return ProviderCompletion(
+                text="抱歉，我无法返回 JSON。", provider=self.name, model=self.model, usage={}
+            )
+
+    outline = build_scene_outline_with_llm(analysis, MalformedProvider())
+
+    # A non-JSON response (even after the repair retry) falls back to rules.
+    assert [scene.id for scene in outline.scenes] == ["sc_001", "sc_002", "sc_003"]
+
+
 def test_build_scene_outline_auto_uses_rules_for_mock_provider() -> None:
     analysis = analyze_chapters(parse_chapters_file(FIXTURE))
 
