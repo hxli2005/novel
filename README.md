@@ -43,6 +43,12 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 `run` 会直接产出**已扩写、已校验**的剧本初稿，写入 `runs/demo/output/screenplay.yaml`；上面分步命令用于需要逐阶段检查或人工介入的场景。
 
+`run` 全程使用同一个 `--provider`：`mock` 时实体抽取与分场走离线规则（仅适用于内置示例），配置 DeepSeek 后使用 `--provider deepseek`，则**分析、分场、逐场扩写全部由模型驱动**，可泛化到任意题材小说：
+
+```bash
+uv run novel2script run path/to/novel.txt --out runs/demo --provider deepseek
+```
+
 ## DeepSeek Provider 配置
 
 项目支持 DeepSeek OpenAI 兼容接口。复制 `.env.example` 后在本地 shell 中导出环境变量：

@@ -154,22 +154,21 @@ def run(
     parsed_chapters_path = layout.intermediates_dir / "parsed_chapters.yaml"
     write_parsed_chapters_yaml(chapters, parsed_chapters_path)
 
-    analysis = analyze_chapters(chapters)
-    write_entity_analysis_outputs(analysis, layout.intermediates_dir)
-    outline = build_scene_outline(analysis)
     scene_outline_path = layout.intermediates_dir / "scene_outline.yaml"
-    write_scene_outline_yaml(outline, scene_outline_path)
-    screenplay = build_screenplay_document(
-        chapters,
-        analysis,
-        outline,
-        ScreenplayGenerationOptions(title=title, author=author),
-    )
     screenplay_path = layout.output_dir / "screenplay.yaml"
-    write_screenplay_yaml(screenplay, screenplay_path)
-
     try:
         llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+        write_entity_analysis_outputs(analysis, layout.intermediates_dir)
+        outline = build_scene_outline_auto(analysis, llm_provider)
+        write_scene_outline_yaml(outline, scene_outline_path)
+        screenplay = build_screenplay_document(
+            chapters,
+            analysis,
+            outline,
+            ScreenplayGenerationOptions(title=title, author=author),
+        )
+        write_screenplay_yaml(screenplay, screenplay_path)
         draft_result = draft_screenplay_scenes(
             screenplay,
             llm_provider,
