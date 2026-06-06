@@ -15,6 +15,7 @@ class WorkspaceLayout:
     input_dir: Path
     intermediates_dir: Path
     index_dir: Path
+    output_dir: Path
 
 
 def build_workspace_layout(root: Path) -> WorkspaceLayout:
@@ -25,6 +26,7 @@ def build_workspace_layout(root: Path) -> WorkspaceLayout:
         input_dir=root / "input",
         intermediates_dir=root / "intermediates",
         index_dir=root / "index",
+        output_dir=root / "output",
     )
 
 
@@ -35,6 +37,7 @@ def initialize_workspace(root: Path) -> WorkspaceLayout:
     layout.input_dir.mkdir(parents=True, exist_ok=True)
     layout.intermediates_dir.mkdir(parents=True, exist_ok=True)
     layout.index_dir.mkdir(parents=True, exist_ok=True)
+    layout.output_dir.mkdir(parents=True, exist_ok=True)
     return layout
 
 

@@ -22,6 +22,11 @@ from novel_to_screenplay.pipeline.scene_outliner import (
     build_scene_outline,
     write_scene_outline_yaml,
 )
+from novel_to_screenplay.pipeline.screenplay_generator import (
+    ScreenplayGenerationOptions,
+    build_screenplay_document,
+    write_screenplay_yaml,
+)
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
     find_staged_source_file,
@@ -64,7 +69,7 @@ def root(
 def status() -> None:
     """Print the current CLI readiness status."""
 
-    console.print("novel2script pipeline is ready through chapter and entity analysis.")
+    console.print("novel2script pipeline is ready through screenplay YAML draft generation.")
 
 
 @app.command()
@@ -86,6 +91,14 @@ def run(
         str,
         typer.Option("--provider", help="LLM provider name."),
     ] = "mock",
+    title: Annotated[
+        str,
+        typer.Option("--title", help="Title written into the generated screenplay YAML."),
+    ] = "剧本初稿",
+    author: Annotated[
+        str,
+        typer.Option("--author", help="Author or adapter name written into metadata."),
+    ] = "待填写",
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Validate inputs without writing output files."),
@@ -116,12 +129,21 @@ def run(
     outline = build_scene_outline(analysis)
     scene_outline_path = layout.intermediates_dir / "scene_outline.yaml"
     write_scene_outline_yaml(outline, scene_outline_path)
+    screenplay = build_screenplay_document(
+        chapters,
+        analysis,
+        outline,
+        ScreenplayGenerationOptions(title=title, author=author),
+    )
+    screenplay_path = layout.output_dir / "screenplay.yaml"
+    write_screenplay_yaml(screenplay, screenplay_path)
 
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
     console.print(f"Parsed chapters: {len(chapters)}")
     console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
     console.print(f"Outlined scenes: {len(outline.scenes)}")
+    console.print(f"Generated screenplay: {screenplay_path}")
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
     console.print(f"Provider: {provider}")
@@ -228,6 +250,56 @@ def outline(
 
     console.print(f"Outlined scenes: {len(outline_result.scenes)}")
     console.print(f"Wrote: {output_path}")
+
+
+@app.command()
+def generate(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory produced by `novel2script parse`.",
+        ),
+    ] = Path("runs/demo"),
+    title: Annotated[
+        str,
+        typer.Option("--title", help="Title written into the generated screenplay YAML."),
+    ] = "剧本初稿",
+    author: Annotated[
+        str,
+        typer.Option("--author", help="Author or adapter name written into metadata."),
+    ] = "待填写",
+) -> None:
+    """Generate output/screenplay.yaml from the current pipeline stages."""
+
+    layout = build_workspace_layout(workspace)
+    layout.output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        staged_path = find_staged_source_file(layout)
+    except FileNotFoundError as exc:
+        console.print("No staged source file found. Run novel2script parse first.")
+        raise typer.Exit(1) from exc
+
+    try:
+        chapters = parse_chapters_file(staged_path)
+    except ChapterParseError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    analysis = analyze_chapters(chapters)
+    outline_result = build_scene_outline(analysis)
+    screenplay = build_screenplay_document(
+        chapters,
+        analysis,
+        outline_result,
+        ScreenplayGenerationOptions(title=title, author=author),
+    )
+    output_path = layout.output_dir / "screenplay.yaml"
+    write_screenplay_yaml(screenplay, output_path)
+
+    console.print(f"Generated screenplay: {output_path}")
+    console.print(f"Scenes: {len(outline_result.scenes)}")
 
 
 def main() -> None:
