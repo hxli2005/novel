@@ -79,7 +79,12 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo \
   --target-format microdrama_episode --fidelity faithful --pacing fast --runtime 2
 ```
 
-这些参数除写入 `adaptation` 块外，配置 LLM provider 后还会**注入逐场扩写的 prompt**：体裁（target_format）、还原度（fidelity）、节奏与对白密度（pacing）、对白风格与旁白处理都会据此影响实际生成的剧本片段。`mock` 离线扩写不受影响。
+这些参数除写入 `adaptation` 块外，配置 LLM provider 后还会**注入生成 prompt**：
+
+- **分场结构**（`outline`/`run`）：`pacing` 决定每章拆几场（fast/compressed 倾向合并、减少场次，slow_burn 倾向拆分、增加场次），`target_format` 为 `microdrama_episode` 时倾向多个短场。
+- **逐场扩写**（`draft-scenes`/`run`）：体裁、还原度、节奏、对白风格与旁白处理影响实际生成的剧本片段。
+
+`mock` 离线路径走规则，不受这些参数影响。
 
 ## DeepSeek Provider 配置
 
