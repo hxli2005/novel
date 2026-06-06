@@ -116,6 +116,32 @@ def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     assert "Generated screenplay:" in result.stdout
 
 
+def test_run_drafts_scenes_and_validates_end_to_end(tmp_path: Path) -> None:
+    source = tmp_path / "novel.md"
+    source.write_text(
+        "\n\n".join(
+            [
+                "# 第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "# 第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "# 第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+
+    assert result.exit_code == 0
+    assert "Drafted scenes: 3" in result.stdout
+    assert "Validation passed:" in result.stdout
+
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+    assert document["scenes"][0]["revision_status"] == "ai_drafted"
+    assert document["quality_report"]["warnings"][-1]["code"] == "AI_SCENE_DRAFTING"
+
+
 def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:
     source = tmp_path / "novel.pdf"
     source.write_text("not a supported input", encoding="utf-8")

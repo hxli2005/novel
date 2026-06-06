@@ -33,10 +33,15 @@ uv run novel2script outline runs/demo
 uv run novel2script generate runs/demo --title 第七页 --author 示例作者
 uv run novel2script draft-scenes runs/demo --provider mock
 uv run novel2script validate runs/demo
+```
+
+或使用一条命令贯通全流程（解析 → 分析 → 大纲 → 生成 → AI 逐场扩写 → Schema 校验）：
+
+```bash
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
 
-完整运行后，最终剧本初稿会写入 `runs/demo/output/screenplay.yaml`。
+`run` 会直接产出**已扩写、已校验**的剧本初稿，写入 `runs/demo/output/screenplay.yaml`；上面分步命令用于需要逐阶段检查或人工介入的场景。
 
 ## DeepSeek Provider 配置
 
