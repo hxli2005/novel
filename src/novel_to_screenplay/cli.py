@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -52,6 +53,73 @@ from novel_to_screenplay.workspace import (
 )
 
 SUPPORTED_INPUT_SUFFIXES = {".txt", ".md"}
+
+
+class TargetFormat(StrEnum):
+    """Adaptation target formats supported by the screenplay schema."""
+
+    screenplay = "screenplay"
+    tv_episode = "tv_episode"
+    web_series_episode = "web_series_episode"
+    microdrama_episode = "microdrama_episode"
+    stage_play = "stage_play"
+
+
+class Fidelity(StrEnum):
+    """How closely the adaptation should follow the source novel."""
+
+    faithful = "faithful"
+    balanced = "balanced"
+    loose = "loose"
+
+
+class Pacing(StrEnum):
+    """Target pacing for the adaptation."""
+
+    slow_burn = "slow_burn"
+    balanced = "balanced"
+    compressed = "compressed"
+    fast = "fast"
+
+
+def _generation_options(
+    *,
+    title: str,
+    author: str,
+    target_format: TargetFormat,
+    fidelity: Fidelity,
+    pacing: Pacing,
+    runtime: int,
+) -> ScreenplayGenerationOptions:
+    """Build screenplay generation options from CLI adaptation knobs."""
+
+    return ScreenplayGenerationOptions(
+        title=title,
+        author=author,
+        target_format=target_format.value,
+        fidelity=fidelity.value,
+        pacing=pacing.value,
+        target_runtime_min=runtime,
+    )
+
+
+TargetFormatOption = Annotated[
+    TargetFormat,
+    typer.Option("--target-format", help="Adaptation target format (e.g. microdrama_episode)."),
+]
+FidelityOption = Annotated[
+    Fidelity,
+    typer.Option("--fidelity", help="How closely the adaptation follows the source."),
+]
+PacingOption = Annotated[
+    Pacing,
+    typer.Option("--pacing", help="Target pacing for the adaptation."),
+]
+RuntimeOption = Annotated[
+    int,
+    typer.Option("--runtime", min=1, help="Target runtime in minutes."),
+]
+
 
 app = typer.Typer(
     help="Convert multi-chapter novels into structured screenplay YAML drafts.",
@@ -124,6 +192,10 @@ def run(
         str,
         typer.Option("--author", help="Author or adapter name written into metadata."),
     ] = "待填写",
+    target_format: TargetFormatOption = TargetFormat.screenplay,
+    fidelity: FidelityOption = Fidelity.balanced,
+    pacing: PacingOption = Pacing.compressed,
+    runtime: RuntimeOption = 8,
     max_tokens: Annotated[
         int,
         typer.Option("--max-tokens", min=1, help="Maximum tokens per drafted scene."),
@@ -170,7 +242,14 @@ def run(
             chapters,
             analysis,
             outline,
-            ScreenplayGenerationOptions(title=title, author=author),
+            _generation_options(
+                title=title,
+                author=author,
+                target_format=target_format,
+                fidelity=fidelity,
+                pacing=pacing,
+                runtime=runtime,
+            ),
         )
         write_screenplay_yaml(screenplay, screenplay_path)
         draft_result = draft_screenplay_scenes(
@@ -401,6 +480,10 @@ def generate(
         str,
         typer.Option("--author", help="Author or adapter name written into metadata."),
     ] = "待填写",
+    target_format: TargetFormatOption = TargetFormat.screenplay,
+    fidelity: FidelityOption = Fidelity.balanced,
+    pacing: PacingOption = Pacing.compressed,
+    runtime: RuntimeOption = 8,
 ) -> None:
     """Generate output/screenplay.yaml from the current pipeline stages."""
 
@@ -423,7 +506,14 @@ def generate(
         chapters,
         analysis,
         outline_result,
-        ScreenplayGenerationOptions(title=title, author=author),
+        _generation_options(
+            title=title,
+            author=author,
+            target_format=target_format,
+            fidelity=fidelity,
+            pacing=pacing,
+            runtime=runtime,
+        ),
     )
     output_path = layout.output_dir / "screenplay.yaml"
     write_screenplay_yaml(screenplay, output_path)

@@ -40,6 +40,46 @@ def test_build_screenplay_document_creates_schema_ready_top_level_fields() -> No
     assert document["quality_report"]["chapter_coverage"][0]["used_in_scene_ids"] == ["sc_001"]
 
 
+def test_build_screenplay_document_reflects_adaptation_options() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "examples" / "novels" / "three_chapters.txt"
+    chapters = parse_chapters_file(fixture)
+    analysis = analyze_chapters(chapters)
+    outline = build_scene_outline(analysis)
+
+    document = build_screenplay_document(
+        chapters,
+        analysis,
+        outline,
+        ScreenplayGenerationOptions(
+            target_format="microdrama_episode",
+            fidelity="faithful",
+            pacing="fast",
+            target_runtime_min=2,
+        ),
+    )
+
+    adaptation = document["adaptation"]
+    assert adaptation["target_format"] == "microdrama_episode"
+    assert adaptation["target_runtime_min"] == 2
+    assert adaptation["strategy"]["fidelity"] == "faithful"
+    assert adaptation["strategy"]["pacing"] == "fast"
+
+
+def test_build_screenplay_document_uses_default_adaptation() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "examples" / "novels" / "three_chapters.txt"
+    chapters = parse_chapters_file(fixture)
+    analysis = analyze_chapters(chapters)
+    outline = build_scene_outline(analysis)
+
+    document = build_screenplay_document(chapters, analysis, outline)
+
+    adaptation = document["adaptation"]
+    assert adaptation["target_format"] == "screenplay"
+    assert adaptation["target_runtime_min"] == 8
+    assert adaptation["strategy"]["fidelity"] == "balanced"
+    assert adaptation["strategy"]["pacing"] == "compressed"
+
+
 def test_dump_yaml_writes_nested_screenplay_sections() -> None:
     fixture = Path(__file__).resolve().parents[1] / "examples" / "novels" / "three_chapters.txt"
     chapters = parse_chapters_file(fixture)

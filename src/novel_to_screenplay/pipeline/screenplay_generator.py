@@ -28,6 +28,10 @@ class ScreenplayGenerationOptions:
     author: str = "待填写"
     language: str = "zh-CN"
     created_at: str | None = None
+    target_format: str = "screenplay"
+    fidelity: str = "balanced"
+    pacing: str = "compressed"
+    target_runtime_min: int = 8
 
 
 def build_screenplay_document(
@@ -51,7 +55,7 @@ def build_screenplay_document(
         "schema_version": SCHEMA_VERSION,
         "metadata": build_metadata(options),
         "source": build_source(chapters, options.title, chapter_summaries),
-        "adaptation": build_adaptation(),
+        "adaptation": build_adaptation(options),
         "story_world": build_story_world(options.title, chapter_summaries, analysis.locations),
         "characters": build_characters(analysis.characters, outline.scenes),
         "locations": build_locations(analysis.locations, outline.scenes),
@@ -109,19 +113,19 @@ def build_source(
     }
 
 
-def build_adaptation() -> dict[str, Any]:
-    """Build default adaptation settings for the first draft."""
+def build_adaptation(options: ScreenplayGenerationOptions) -> dict[str, Any]:
+    """Build adaptation settings for the first draft from user options."""
 
     return {
-        "target_format": "screenplay",
-        "target_runtime_min": 8,
+        "target_format": options.target_format,
+        "target_runtime_min": options.target_runtime_min,
         "episode": {
             "mode": "single",
             "number": None,
         },
         "strategy": {
-            "fidelity": "balanced",
-            "pacing": "compressed",
+            "fidelity": options.fidelity,
+            "pacing": options.pacing,
             "dialogue_style": "natural",
             "narration_policy": "convert_to_action_or_dialogue",
         },
