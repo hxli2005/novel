@@ -26,6 +26,7 @@ from novel_to_screenplay.pipeline.entity_analyzer import (
 from novel_to_screenplay.pipeline.scene_drafter import draft_screenplay_scenes
 from novel_to_screenplay.pipeline.scene_outliner import (
     build_scene_outline,
+    build_scene_outline_auto,
     write_scene_outline_yaml,
 )
 from novel_to_screenplay.pipeline.screenplay_generator import (
@@ -344,6 +345,14 @@ def outline(
             help="Workspace directory produced by `novel2script parse`.",
         ),
     ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="Provider for analysis and outlining. 'mock' uses offline rules; "
+            "an LLM provider plans scenes from the chapter analysis.",
+        ),
+    ] = "mock",
 ) -> None:
     """Generate a first-pass scene outline file."""
 
@@ -359,12 +368,18 @@ def outline(
     except ChapterParseError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    analysis = analyze_chapters(chapters)
-    outline_result = build_scene_outline(analysis)
+    try:
+        llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+        outline_result = build_scene_outline_auto(analysis, llm_provider)
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
     output_path = layout.intermediates_dir / "scene_outline.yaml"
     write_scene_outline_yaml(outline_result, output_path)
 
     console.print(f"Outlined scenes: {len(outline_result.scenes)}")
+    console.print(f"Provider: {provider}")
     console.print(f"Wrote: {output_path}")
 
 
