@@ -9,6 +9,11 @@ import typer
 from rich.console import Console
 
 from novel_to_screenplay import __version__
+from novel_to_screenplay.pipeline.chapter_parser import (
+    ChapterParseError,
+    parse_chapters_file,
+    write_parsed_chapters_yaml,
+)
 from novel_to_screenplay.workspace import initialize_workspace, stage_source_file
 
 SUPPORTED_INPUT_SUFFIXES = {".txt", ".md"}
@@ -92,6 +97,39 @@ def run(
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
     console.print(f"Provider: {provider}")
+
+
+@app.command()
+def parse(
+    input_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to a .txt or .md novel file.",
+        ),
+    ],
+    out: Annotated[
+        Path,
+        typer.Option("--out", "-o", help="Output workspace directory."),
+    ] = Path("runs/demo"),
+) -> None:
+    """Parse novel chapters and write parsed_chapters.yaml."""
+
+    input_path = _validate_input_path(input_path)
+    layout = initialize_workspace(out)
+    staged_path = stage_source_file(input_path, layout)
+
+    try:
+        chapters = parse_chapters_file(staged_path)
+    except ChapterParseError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    output_path = layout.intermediates_dir / "parsed_chapters.yaml"
+    write_parsed_chapters_yaml(chapters, output_path)
+    console.print(f"Parsed chapters: {len(chapters)}")
+    console.print(f"Wrote: {output_path}")
 
 
 def main() -> None:
