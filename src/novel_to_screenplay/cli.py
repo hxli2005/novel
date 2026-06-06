@@ -14,6 +14,10 @@ from novel_to_screenplay.pipeline.chapter_parser import (
     parse_chapters_file,
     write_parsed_chapters_yaml,
 )
+from novel_to_screenplay.pipeline.consistency import (
+    analyze_consistency,
+    apply_consistency_findings,
+)
 from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
     write_entity_analysis_outputs,
@@ -493,6 +497,50 @@ def validate(
     for issue in result.issues:
         console.print(f"- {issue.code} {issue.path}: {issue.message}")
     raise typer.Exit(1)
+
+
+@app.command()
+def check(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory containing output/screenplay.yaml.",
+        ),
+    ] = Path("runs/demo"),
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write/--no-write",
+            help="Append findings to the screenplay quality_report (default: on).",
+        ),
+    ] = True,
+) -> None:
+    """Run story-level consistency checks and record findings in quality_report."""
+
+    layout = build_workspace_layout(workspace)
+    screenplay_path = layout.output_dir / "screenplay.yaml"
+    if not screenplay_path.is_file():
+        console.print("No screenplay file found. Run novel2script generate first.")
+        raise typer.Exit(1)
+
+    document = load_yaml_document(screenplay_path)
+    if not isinstance(document, dict):
+        console.print("screenplay YAML must contain a top-level object.")
+        raise typer.Exit(1)
+
+    findings = analyze_consistency(document)
+    console.print(f"Consistency findings: {len(findings)}")
+    for finding in findings:
+        location = f" [{finding.scene_id}]" if finding.scene_id else ""
+        console.print(f"- {finding.code}{location}: {finding.message}")
+
+    if write and findings:
+        apply_consistency_findings(document, findings)
+        write_screenplay_yaml(document, screenplay_path)
+        console.print(f"Wrote: {screenplay_path}")
 
 
 def main() -> None:

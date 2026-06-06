@@ -45,6 +45,14 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 `run` 会直接产出**已扩写、已校验**的剧本初稿，写入 `runs/demo/output/screenplay.yaml`；上面分步命令用于需要逐阶段检查或人工介入的场景。
 
+`check` 对生成的剧本做故事级一致性检查（确定性、离线），并把发现写入 `quality_report.warnings`，供作者复核：
+
+- `CHAPTER_NOT_ADAPTED`：某章节未被任何场景改编（可能遗漏剧情）。
+- `CHARACTER_UNUSED`：人物已登记但从未出场。
+- `CHARACTER_NO_DIALOGUE`：人物在场却全程没有台词。
+
+写入的发现仍满足剧本 JSON Schema，`check` 后再 `validate` 依然通过。
+
 ## DeepSeek Provider 配置
 
 项目支持 DeepSeek OpenAI 兼容接口。复制 `.env.example` 后在本地 shell 中导出环境变量：
