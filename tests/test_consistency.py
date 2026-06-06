@@ -69,6 +69,20 @@ def test_analyze_consistency_clean_document_has_no_findings() -> None:
     assert analyze_consistency(document) == []
 
 
+def test_unused_check_treats_script_speakers_as_present() -> None:
+    document = build_document()
+    # char_003 is absent from every characters_present but speaks in a scene;
+    # a schema-valid document can be this slightly inconsistent.
+    document["scenes"][0]["script"].append(
+        {"type": "dialogue", "character_id": "char_003", "text": "我只在台词里出现。"}
+    )
+
+    findings = analyze_consistency(document)
+
+    unused_messages = [f.message for f in findings if f.code == "CHARACTER_UNUSED"]
+    assert all("char_003" not in message for message in unused_messages)
+
+
 def test_apply_consistency_findings_updates_quality_report() -> None:
     document = build_document()
     findings = analyze_consistency(document)

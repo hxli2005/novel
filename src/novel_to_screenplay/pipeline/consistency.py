@@ -65,6 +65,10 @@ def check_unused_characters(document: dict[str, Any]) -> list[ConsistencyFinding
         for scene in _scenes(document)
         for character_id in _str_list(scene.get("characters_present"))
     }
+    # A character who speaks in a scene is present even if (in a slightly
+    # inconsistent but schema-valid document) they are missing from
+    # characters_present. Counting speakers avoids a false CHARACTER_UNUSED.
+    present_ids |= _speaking_character_ids(document)
     findings = []
     for character in _characters(document):
         character_id = character.get("id")
@@ -78,18 +82,13 @@ def check_unused_characters(document: dict[str, Any]) -> list[ConsistencyFinding
 def check_silent_characters(document: dict[str, Any]) -> list[ConsistencyFinding]:
     """Flag characters who are present in a scene but never speak anywhere."""
 
-    speaking_ids: set[str] = set()
+    speaking_ids = _speaking_character_ids(document)
     first_scene_by_character: dict[str, str | None] = {}
     for scene in _scenes(document):
         scene_id = scene.get("id")
         scene_id = scene_id if isinstance(scene_id, str) else None
         for character_id in _str_list(scene.get("characters_present")):
             first_scene_by_character.setdefault(character_id, scene_id)
-        for element in _script(scene):
-            if element.get("type") in DIALOGUE_TYPES:
-                speaker = element.get("character_id")
-                if isinstance(speaker, str):
-                    speaking_ids.add(speaker)
 
     names = {
         character["id"]: character.get("name", character["id"])
@@ -189,6 +188,19 @@ def _script(scene: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(script, list):
         return []
     return [element for element in script if isinstance(element, dict)]
+
+
+def _speaking_character_ids(document: dict[str, Any]) -> set[str]:
+    """Character ids that speak via a dialogue or voiceover element."""
+
+    speaking_ids: set[str] = set()
+    for scene in _scenes(document):
+        for element in _script(scene):
+            if element.get("type") in DIALOGUE_TYPES:
+                speaker = element.get("character_id")
+                if isinstance(speaker, str):
+                    speaking_ids.add(speaker)
+    return speaking_ids
 
 
 def _str_list(value: Any) -> list[str]:
