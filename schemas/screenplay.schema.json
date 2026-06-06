@@ -1,0 +1,783 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/screenplay.schema.json",
+  "title": "Screenplay YAML v0.1",
+  "description": "Machine validation schema for screenplay_yaml/v0.1 documents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metadata",
+    "source",
+    "adaptation",
+    "characters",
+    "locations",
+    "scenes",
+    "quality_report"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "screenplay_yaml/v0.1"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "adaptation": {
+      "$ref": "#/$defs/adaptation"
+    },
+    "story_world": {
+      "$ref": "#/$defs/story_world"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/character"
+      }
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/location"
+      }
+    },
+    "structure": {
+      "$ref": "#/$defs/structure"
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/scene"
+      }
+    },
+    "quality_report": {
+      "$ref": "#/$defs/quality_report"
+    }
+  },
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "title",
+        "author",
+        "language",
+        "created_at",
+        "generator"
+      ],
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "author": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "language": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "generator": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "version": {
+              "$ref": "#/$defs/non_empty_string"
+            }
+          }
+        },
+        "rights": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "source_type",
+        "original_title",
+        "chapter_count",
+        "chapters"
+      ],
+      "properties": {
+        "source_type": {
+          "const": "novel"
+        },
+        "original_title": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "chapter_count": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "chapters": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/chapter"
+          }
+        }
+      }
+    },
+    "chapter": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "order",
+        "title",
+        "summary"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text_hash": {
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "adaptation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "target_format",
+        "strategy",
+        "human_review_required"
+      ],
+      "properties": {
+        "target_format": {
+          "enum": [
+            "screenplay",
+            "tv_episode",
+            "web_series_episode",
+            "microdrama_episode",
+            "stage_play"
+          ]
+        },
+        "target_runtime_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "episode": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "fidelity": {
+              "enum": [
+                "faithful",
+                "balanced",
+                "loose"
+              ]
+            },
+            "pacing": {
+              "enum": [
+                "slow_burn",
+                "balanced",
+                "compressed",
+                "fast"
+              ]
+            },
+            "dialogue_style": {
+              "type": "string"
+            },
+            "narration_policy": {
+              "enum": [
+                "preserve_as_voiceover",
+                "convert_to_action_or_dialogue",
+                "omit_unfilmable"
+              ]
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "human_review_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "story_world": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "logline": {
+          "type": "string"
+        },
+        "synopsis": {
+          "type": "string"
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "setting": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "timeline_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "chapter_id"
+      ],
+      "properties": {
+        "chapter_id": {
+          "$ref": "#/$defs/id"
+        },
+        "paragraph_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "paragraph_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_ref"
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "name",
+        "role"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "role": {
+          "enum": [
+            "protagonist",
+            "antagonist",
+            "supporting",
+            "minor",
+            "ensemble",
+            "unknown"
+          ]
+        },
+        "age": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "motivation": {
+          "type": "string"
+        },
+        "arc": {
+          "type": "string"
+        },
+        "voice": {
+          "type": "string"
+        },
+        "first_appearance": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "chapter_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "type": {
+          "enum": [
+            "interior",
+            "exterior",
+            "interior_exterior",
+            "virtual",
+            "unknown"
+          ]
+        },
+        "visual_description": {
+          "type": "string"
+        },
+        "recurring": {
+          "type": "boolean"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "acts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "id",
+              "title",
+              "scene_ids"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "title": {
+                "$ref": "#/$defs/non_empty_string"
+              },
+              "scene_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
+        },
+        "key_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "omitted_material": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "order",
+        "chapter_refs",
+        "scene_heading",
+        "summary",
+        "characters_present",
+        "script"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chapter_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "scene_heading": {
+          "$ref": "#/$defs/scene_heading"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "dramatic_function": {
+          "type": "string"
+        },
+        "estimated_screen_time_sec": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "characters_present": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "props": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "beats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/beat"
+          }
+        },
+        "script": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/script_element"
+          }
+        },
+        "continuity": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "revision_status": {
+          "type": "string"
+        }
+      }
+    },
+    "scene_heading": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "location_mode",
+        "display",
+        "time_of_day"
+      ],
+      "properties": {
+        "location_mode": {
+          "enum": [
+            "INT",
+            "EXT",
+            "INT_EXT",
+            "UNKNOWN"
+          ]
+        },
+        "location_id": {
+          "$ref": "#/$defs/id"
+        },
+        "display": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "time_of_day": {
+          "enum": [
+            "DAY",
+            "NIGHT",
+            "MORNING",
+            "EVENING",
+            "CONTINUOUS",
+            "LATER",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "summary"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "script_element": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/action_element"
+        },
+        {
+          "$ref": "#/$defs/dialogue_element"
+        },
+        {
+          "$ref": "#/$defs/voiceover_element"
+        },
+        {
+          "$ref": "#/$defs/transition_element"
+        },
+        {
+          "$ref": "#/$defs/note_element"
+        }
+      ]
+    },
+    "action_element": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "action"
+        },
+        "text": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "dialogue_element": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "character_id",
+        "character_name",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "dialogue"
+        },
+        "character_id": {
+          "$ref": "#/$defs/id"
+        },
+        "character_name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "parenthetical": {
+          "type": "string"
+        },
+        "text": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "subtext": {
+          "type": "string"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "voiceover_element": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "character_id",
+        "character_name",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "voiceover"
+        },
+        "character_id": {
+          "$ref": "#/$defs/id"
+        },
+        "character_name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "text": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "transition_element": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "transition"
+        },
+        "text": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "note_element": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "note",
+            "parenthetical"
+          ]
+        },
+        "text": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "source_refs": {
+          "$ref": "#/$defs/source_refs"
+        }
+      }
+    },
+    "quality_report": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "validation_status",
+        "chapter_coverage",
+        "warnings",
+        "unresolved_questions"
+      ],
+      "properties": {
+        "validation_status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail"
+          ]
+        },
+        "chapter_coverage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "chapter_id",
+              "used_in_scene_ids"
+            ],
+            "properties": {
+              "chapter_id": {
+                "$ref": "#/$defs/id"
+              },
+              "used_in_scene_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "coverage_note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/non_empty_string"
+              },
+              "message": {
+                "$ref": "#/$defs/non_empty_string"
+              },
+              "scene_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        },
+        "unresolved_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
