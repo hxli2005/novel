@@ -19,7 +19,7 @@ def test_status_command() -> None:
     result = runner.invoke(app, ["status"])
 
     assert result.exit_code == 0
-    assert "pipeline is ready through chapter and entity analysis" in result.stdout
+    assert "pipeline is ready through screenplay YAML draft generation" in result.stdout
 
 
 def test_run_dry_run_validates_input_without_creating_workspace(tmp_path: Path) -> None:
@@ -64,9 +64,11 @@ def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     assert (output_dir / "intermediates" / "characters.yaml").is_file()
     assert (output_dir / "intermediates" / "locations.yaml").is_file()
     assert (output_dir / "intermediates" / "scene_outline.yaml").is_file()
+    assert (output_dir / "output" / "screenplay.yaml").is_file()
     assert "Parsed chapters: 3" in result.stdout
     assert "Analyzed chapters: 3" in result.stdout
     assert "Outlined scenes: 3" in result.stdout
+    assert "Generated screenplay:" in result.stdout
 
 
 def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:
@@ -182,3 +184,35 @@ def test_outline_command_writes_scene_outline(tmp_path: Path) -> None:
     assert 'id: "sc_001"' in outline_text
     assert "chapter_refs:" in outline_text
     assert 'dramatic_function: "inciting_incident"' in outline_text
+
+
+def test_generate_command_writes_screenplay_yaml(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    parse_result = runner.invoke(app, ["parse", str(source), "--out", str(output_dir)])
+    generate_result = runner.invoke(
+        app,
+        ["generate", str(output_dir), "--title", "第七页", "--author", "示例作者"],
+    )
+
+    assert parse_result.exit_code == 0
+    assert generate_result.exit_code == 0
+    screenplay_file = output_dir / "output" / "screenplay.yaml"
+    assert screenplay_file.is_file()
+    screenplay_text = screenplay_file.read_text(encoding="utf-8")
+    assert "Generated screenplay:" in generate_result.stdout
+    assert 'schema_version: "screenplay_yaml/v0.1"' in screenplay_text
+    assert 'title: "第七页"' in screenplay_text
+    assert "quality_report:" in screenplay_text
+    assert "script:" in screenplay_text

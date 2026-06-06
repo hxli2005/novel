@@ -1,6 +1,6 @@
 # 小说转剧本工具
 
-当前状态：开发前研究、Schema 设计、Python CLI、章节解析与实体分析阶段。
+当前状态：开发前研究、Schema 设计、Python CLI、章节解析、实体分析、场景大纲和规则型剧本 YAML 生成阶段。
 
 目标是开发一款 AI 辅助剧本创作工具，支持将 3 个章节以上的小说文本转换为可编辑的结构化剧本 YAML 初稿，帮助小说作者降低改编门槛。
 
@@ -28,10 +28,13 @@ uv run novel2script status
 uv run novel2script parse examples/novels/three_chapters.txt --out runs/demo
 uv run novel2script analyze runs/demo
 uv run novel2script outline runs/demo
+uv run novel2script generate runs/demo --title 第七页 --author 示例作者
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
 
+完整运行后，最终剧本初稿会写入 `runs/demo/output/screenplay.yaml`。
+
 ## 下一步建议
 
-1. 实现逐场剧本生成和 YAML 校验流程。
+1. 实现 YAML Schema 校验与 ID 引用一致性检查。
 2. 按 PR 规范拆分为多个小功能逐步提交。
