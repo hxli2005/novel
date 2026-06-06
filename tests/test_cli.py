@@ -1,12 +1,75 @@
+import json
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
 from novel_to_screenplay import __version__
 from novel_to_screenplay.cli import app
+from novel_to_screenplay.providers import ChatMessage, ProviderCompletion
 
 runner = CliRunner()
+
+
+class FakeLLMProvider:
+    """A non-mock provider returning self-consistent JSON for every stage.
+
+    It branches on the system prompt so a single fake can drive LLM analysis,
+    outlining, and scene drafting through one `run` invocation.
+    """
+
+    name = "fake-llm"
+    model = "fake-llm-model"
+
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> ProviderCompletion:
+        system = messages[0].content
+        if "结构师" in system:
+            payload = [
+                {
+                    "chapter_refs": [f"ch_{index:03d}"],
+                    "location_id": "loc_001",
+                    "display": "房间",
+                    "location_mode": "INT",
+                    "time_of_day": "DAY",
+                    "summary": f"第{index}场。",
+                    "dramatic_function": "development",
+                    "characters_present": ["char_001"],
+                    "required_event_ids": [f"evt_raw_{index:03d}"],
+                    "setup_notes": [],
+                }
+                for index in (1, 2, 3)
+            ]
+        elif "分析助手" in system:
+            payload = {
+                "summary": "梗概。",
+                "characters": ["甲"],
+                "locations": ["房间"],
+                "events": ["关键事件"],
+                "possible_setups": [],
+            }
+        else:
+            payload = [
+                {"type": "action", "text": "甲走进房间。"},
+                {
+                    "type": "dialogue",
+                    "character_id": "char_001",
+                    "character_name": "甲",
+                    "text": "我来了。",
+                },
+            ]
+        return ProviderCompletion(
+            text=json.dumps(payload, ensure_ascii=False),
+            provider=self.name,
+            model=self.model,
+            usage={},
+        )
 
 
 def test_version_flag() -> None:
@@ -114,6 +177,65 @@ def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     assert "Analyzed chapters: 3" in result.stdout
     assert "Outlined scenes: 3" in result.stdout
     assert "Generated screenplay:" in result.stdout
+
+
+def test_run_drafts_scenes_and_validates_end_to_end(tmp_path: Path) -> None:
+    source = tmp_path / "novel.md"
+    source.write_text(
+        "\n\n".join(
+            [
+                "# 第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "# 第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "# 第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+
+    assert result.exit_code == 0
+    assert "Drafted scenes: 3" in result.stdout
+    assert "Validation passed:" in result.stdout
+
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+    assert document["scenes"][0]["revision_status"] == "ai_drafted"
+    assert document["quality_report"]["warnings"][-1]["code"] == "AI_SCENE_DRAFTING"
+
+
+def test_run_routes_llm_provider_through_whole_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 起\n林青在档案室发现线索。",
+                "第二章 承\n林青进入药品库。",
+                "第三章 合\n赵岚走上天台。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+    monkeypatch.setattr("novel_to_screenplay.cli.build_provider", lambda *a, **k: FakeLLMProvider())
+
+    result = runner.invoke(
+        app, ["run", str(source), "--out", str(output_dir), "--provider", "fake"]
+    )
+
+    assert result.exit_code == 0
+    assert "Provider: fake-llm" in result.stdout
+    assert "Validation passed:" in result.stdout
+
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+    # "甲" comes only from the fake provider, proving the structure is LLM-derived
+    # rather than from the rule-based regex over the demo-style text.
+    assert any(character["name"] == "甲" for character in document["characters"])
+    assert len(document["scenes"]) == 3
 
 
 def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:
