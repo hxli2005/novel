@@ -517,6 +517,47 @@ def test_check_command_records_findings_and_keeps_schema_valid(tmp_path: Path) -
     assert "Validation passed:" in validate_result.stdout
 
 
+def test_check_with_llm_provider_adds_story_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。",
+                "第二章 药品库\n林青进入药品库。",
+                "第三章 天台\n赵岚走上天台。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+    runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+
+    class ReviewProvider:
+        name = "fake-review"
+        model = "fake-review"
+
+        def complete(self, messages, *, temperature=0.2, max_tokens=2048):  # type: ignore[no-untyped-def]
+            del messages, temperature, max_tokens
+            payload = [{"code": "FORESHADOW_UNRESOLVED", "message": "铜钥匙未回收，请补回收场景。"}]
+            return ProviderCompletion(
+                text=json.dumps(payload, ensure_ascii=False),
+                provider=self.name,
+                model=self.model,
+                usage={},
+            )
+
+    monkeypatch.setattr("novel_to_screenplay.cli.build_provider", lambda *a, **k: ReviewProvider())
+    check_result = runner.invoke(app, ["check", str(output_dir), "--provider", "deepseek"])
+    validate_result = runner.invoke(app, ["validate", str(output_dir)])
+
+    assert check_result.exit_code == 0
+    assert "FORESHADOW_UNRESOLVED" in check_result.stdout
+    # The LLM finding written into quality_report keeps the document schema-valid.
+    assert validate_result.exit_code == 0
+
+
 def test_check_command_requires_screenplay_yaml(tmp_path: Path) -> None:
     workspace = tmp_path / "run"
     workspace.mkdir()

@@ -39,8 +39,10 @@ from novel_to_screenplay.pipeline.screenplay_validator import (
     load_yaml_document,
     validate_screenplay_file,
 )
+from novel_to_screenplay.pipeline.story_review import review_story_with_llm
 from novel_to_screenplay.providers import (
     ChatMessage,
+    MockProvider,
     ProviderError,
     build_provider,
     get_provider_statuses,
@@ -629,6 +631,14 @@ def check(
             help="Workspace directory containing output/screenplay.yaml.",
         ),
     ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="'mock' runs deterministic checks only; an LLM provider also "
+            "reviews foreshadowing, character arcs, and cross-scene causality.",
+        ),
+    ] = "mock",
     write: Annotated[
         bool,
         typer.Option(
@@ -650,7 +660,15 @@ def check(
         console.print("screenplay YAML must contain a top-level object.")
         raise typer.Exit(1)
 
+    try:
+        llm_provider = build_provider(provider)
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
+
     findings = analyze_consistency(document)
+    if not isinstance(llm_provider, MockProvider):
+        findings = findings + review_story_with_llm(document, llm_provider)
     console.print(f"Consistency findings: {len(findings)}")
     for finding in findings:
         location = f" [{finding.scene_id}]" if finding.scene_id else ""
