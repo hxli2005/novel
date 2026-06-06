@@ -145,6 +145,61 @@ def test_check_provider_reports_missing_deepseek_key() -> None:
     assert "DEEPSEEK_API_KEY is required" in result.stdout
 
 
+def test_run_applies_adaptation_knobs_and_validates(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。",
+                "第二章 药品库\n林青进入药品库。",
+                "第三章 天台\n赵岚走上天台。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            str(source),
+            "--out",
+            str(output_dir),
+            "--target-format",
+            "microdrama_episode",
+            "--fidelity",
+            "faithful",
+            "--pacing",
+            "fast",
+            "--runtime",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Validation passed:" in result.stdout
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+    adaptation = document["adaptation"]
+    assert adaptation["target_format"] == "microdrama_episode"
+    assert adaptation["target_runtime_min"] == 2
+    assert adaptation["strategy"]["fidelity"] == "faithful"
+    assert adaptation["strategy"]["pacing"] == "fast"
+
+
+def test_run_rejects_invalid_target_format(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text("第一章\n内容。", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["run", str(source), "--target-format", "comic_book", "--dry-run"],
+    )
+
+    assert result.exit_code != 0
+
+
 def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     source = tmp_path / "novel.md"
     source.write_text(

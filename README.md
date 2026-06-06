@@ -59,6 +59,20 @@ uv run novel2script run path/to/novel.txt --out runs/demo --provider deepseek
 
 写入的发现仍满足剧本 JSON Schema，`check` 后再 `validate` 依然通过。
 
+## 改编参数
+
+`run` 与 `generate` 支持改编旋钮，写入剧本的 `adaptation` 块：
+
+- `--target-format`：`screenplay` | `tv_episode` | `web_series_episode` | `microdrama_episode` | `stage_play`
+- `--fidelity`：`faithful` | `balanced` | `loose`（贴合原著的程度）
+- `--pacing`：`slow_burn` | `balanced` | `compressed` | `fast`
+- `--runtime`：目标时长（分钟）
+
+```bash
+uv run novel2script run examples/novels/three_chapters.txt --out runs/demo \
+  --target-format microdrama_episode --fidelity faithful --pacing fast --runtime 2
+```
+
 ## DeepSeek Provider 配置
 
 项目支持 DeepSeek OpenAI 兼容接口。复制 `.env.example` 后在本地 shell 中导出环境变量：
