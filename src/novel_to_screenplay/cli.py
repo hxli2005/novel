@@ -20,6 +20,7 @@ from novel_to_screenplay.pipeline.consistency import (
 )
 from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
+    analyze_chapters_auto,
     write_entity_analysis_outputs,
 )
 from novel_to_screenplay.pipeline.scene_drafter import draft_screenplay_scenes
@@ -294,6 +295,14 @@ def analyze(
             help="Workspace directory produced by `novel2script parse`.",
         ),
     ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="Provider for entity extraction. 'mock' uses offline rules; "
+            "an LLM provider analyzes each chapter.",
+        ),
+    ] = "mock",
 ) -> None:
     """Extract first-pass entities and chapter analysis files."""
 
@@ -309,12 +318,18 @@ def analyze(
     except ChapterParseError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    analysis = analyze_chapters(chapters)
+    try:
+        llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
     write_entity_analysis_outputs(analysis, layout.intermediates_dir)
 
     console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
+    console.print(f"Provider: {provider}")
     console.print(f"Wrote: {layout.intermediates_dir / 'chapter_analysis.yaml'}")
 
 
