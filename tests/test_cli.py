@@ -63,8 +63,10 @@ def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     assert (output_dir / "intermediates" / "chapter_analysis.yaml").is_file()
     assert (output_dir / "intermediates" / "characters.yaml").is_file()
     assert (output_dir / "intermediates" / "locations.yaml").is_file()
+    assert (output_dir / "intermediates" / "scene_outline.yaml").is_file()
     assert "Parsed chapters: 3" in result.stdout
     assert "Analyzed chapters: 3" in result.stdout
+    assert "Outlined scenes: 3" in result.stdout
 
 
 def test_run_rejects_unsupported_input_suffix(tmp_path: Path) -> None:
@@ -152,3 +154,31 @@ def test_analyze_command_requires_staged_source(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "No staged source file found. Run novel2script parse first." in result.output
+
+
+def test_outline_command_writes_scene_outline(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    parse_result = runner.invoke(app, ["parse", str(source), "--out", str(output_dir)])
+    outline_result = runner.invoke(app, ["outline", str(output_dir)])
+
+    assert parse_result.exit_code == 0
+    assert outline_result.exit_code == 0
+    outline_file = output_dir / "intermediates" / "scene_outline.yaml"
+    assert outline_file.is_file()
+    outline_text = outline_file.read_text(encoding="utf-8")
+    assert "Outlined scenes: 3" in outline_result.stdout
+    assert 'id: "sc_001"' in outline_text
+    assert "chapter_refs:" in outline_text
+    assert 'dramatic_function: "inciting_incident"' in outline_text
