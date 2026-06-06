@@ -432,7 +432,7 @@ def draft_scenes(
     layout = build_workspace_layout(workspace)
     screenplay_path = layout.output_dir / "screenplay.yaml"
     if not screenplay_path.is_file():
-        console.print("No screenplay file found. Run novel2script generate first.")
+        console.print("No screenplay file found. Run novel2script run or generate first.")
         raise typer.Exit(1)
 
     try:
@@ -481,7 +481,7 @@ def validate(
     layout = build_workspace_layout(workspace)
     screenplay_path = layout.output_dir / "screenplay.yaml"
     if not screenplay_path.is_file():
-        console.print("No screenplay file found. Run novel2script generate first.")
+        console.print("No screenplay file found. Run novel2script run or generate first.")
         raise typer.Exit(1)
     if not schema.is_file():
         console.print(f"No schema file found: {schema}")
@@ -523,7 +523,7 @@ def check(
     layout = build_workspace_layout(workspace)
     screenplay_path = layout.output_dir / "screenplay.yaml"
     if not screenplay_path.is_file():
-        console.print("No screenplay file found. Run novel2script generate first.")
+        console.print("No screenplay file found. Run novel2script run or generate first.")
         raise typer.Exit(1)
 
     document = load_yaml_document(screenplay_path)

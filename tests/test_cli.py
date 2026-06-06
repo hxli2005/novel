@@ -373,7 +373,7 @@ def test_check_command_requires_screenplay_yaml(tmp_path: Path) -> None:
     result = runner.invoke(app, ["check", str(workspace)])
 
     assert result.exit_code != 0
-    assert "No screenplay file found. Run novel2script generate first." in result.stdout
+    assert "No screenplay file found. Run novel2script run or generate first." in result.stdout
 
 
 def test_draft_scenes_command_requires_screenplay_yaml(tmp_path: Path) -> None:
@@ -383,7 +383,7 @@ def test_draft_scenes_command_requires_screenplay_yaml(tmp_path: Path) -> None:
     result = runner.invoke(app, ["draft-scenes", str(workspace)])
 
     assert result.exit_code != 0
-    assert "No screenplay file found. Run novel2script generate first." in result.stdout
+    assert "No screenplay file found. Run novel2script run or generate first." in result.stdout
 
 
 def test_validate_command_reports_unknown_id_references(tmp_path: Path) -> None:
