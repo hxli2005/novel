@@ -18,6 +18,10 @@ from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
     write_entity_analysis_outputs,
 )
+from novel_to_screenplay.pipeline.scene_outliner import (
+    build_scene_outline,
+    write_scene_outline_yaml,
+)
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
     find_staged_source_file,
@@ -109,11 +113,15 @@ def run(
 
     analysis = analyze_chapters(chapters)
     write_entity_analysis_outputs(analysis, layout.intermediates_dir)
+    outline = build_scene_outline(analysis)
+    scene_outline_path = layout.intermediates_dir / "scene_outline.yaml"
+    write_scene_outline_yaml(outline, scene_outline_path)
 
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
     console.print(f"Parsed chapters: {len(chapters)}")
     console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
+    console.print(f"Outlined scenes: {len(outline.scenes)}")
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
     console.print(f"Provider: {provider}")
@@ -185,6 +193,41 @@ def analyze(
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
     console.print(f"Wrote: {layout.intermediates_dir / 'chapter_analysis.yaml'}")
+
+
+@app.command()
+def outline(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory produced by `novel2script parse`.",
+        ),
+    ] = Path("runs/demo"),
+) -> None:
+    """Generate a first-pass scene outline file."""
+
+    layout = build_workspace_layout(workspace)
+    try:
+        staged_path = find_staged_source_file(layout)
+    except FileNotFoundError as exc:
+        console.print("No staged source file found. Run novel2script parse first.")
+        raise typer.Exit(1) from exc
+
+    try:
+        chapters = parse_chapters_file(staged_path)
+    except ChapterParseError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    analysis = analyze_chapters(chapters)
+    outline_result = build_scene_outline(analysis)
+    output_path = layout.intermediates_dir / "scene_outline.yaml"
+    write_scene_outline_yaml(outline_result, output_path)
+
+    console.print(f"Outlined scenes: {len(outline_result.scenes)}")
+    console.print(f"Wrote: {output_path}")
 
 
 def main() -> None:
