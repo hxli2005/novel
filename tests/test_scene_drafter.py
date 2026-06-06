@@ -7,7 +7,9 @@ from novel_to_screenplay.pipeline.chapter_parser import parse_chapters_file
 from novel_to_screenplay.pipeline.entity_analyzer import analyze_chapters
 from novel_to_screenplay.pipeline.scene_drafter import (
     SceneDraftError,
+    build_scene_prompt,
     draft_screenplay_scenes,
+    summarize_adaptation,
 )
 from novel_to_screenplay.pipeline.scene_outliner import build_scene_outline
 from novel_to_screenplay.pipeline.screenplay_generator import (
@@ -122,6 +124,40 @@ def test_draft_screenplay_scenes_rejects_invalid_provider_output() -> None:
 
     with pytest.raises(SceneDraftError):
         draft_screenplay_scenes(document, InvalidJsonProvider(), scene_limit=1)
+
+
+def test_build_scene_prompt_includes_adaptation_strategy() -> None:
+    document = {
+        "adaptation": {
+            "target_format": "microdrama_episode",
+            "target_runtime_min": 2,
+            "strategy": {"fidelity": "faithful", "pacing": "fast"},
+        },
+        "story_world": {},
+        "characters": [{"id": "char_001", "name": "甲"}],
+    }
+    scene = {"id": "sc_001", "characters_present": ["char_001"], "chapter_refs": ["ch_001"]}
+    characters_by_id = {"char_001": {"id": "char_001", "name": "甲"}}
+
+    messages = build_scene_prompt(document, scene, characters_by_id)
+
+    user_content = messages[1].content
+    assert "microdrama_episode" in user_content
+    assert "fast" in user_content
+    assert "faithful" in user_content
+    # The system instruction tells the model to follow the adaptation strategy.
+    assert "adaptation" in messages[0].content
+
+
+def test_summarize_adaptation_falls_back_to_defaults() -> None:
+    assert summarize_adaptation({}) == {
+        "target_format": "screenplay",
+        "target_runtime_min": None,
+        "fidelity": "balanced",
+        "pacing": "compressed",
+        "dialogue_style": "natural",
+        "narration_policy": "convert_to_action_or_dialogue",
+    }
 
 
 def build_fixture_document() -> dict:

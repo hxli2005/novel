@@ -112,6 +112,7 @@ def build_scene_prompt(
         if character_id in characters_by_id
     ]
     payload = {
+        "adaptation": summarize_adaptation(document),
         "story_world": {
             "logline": document.get("story_world", {}).get("logline", ""),
             "synopsis": document.get("story_world", {}).get("synopsis", ""),
@@ -151,6 +152,9 @@ def build_scene_prompt(
             role="system",
             content=(
                 "你是专业中文剧本改编助手。请把小说场景大纲扩写成可编辑剧本片段。"
+                "请严格遵循 adaptation：按 target_format 的体裁惯例改写，"
+                "fidelity 决定对原著的取舍尺度，pacing 决定节奏与对白密度，"
+                "dialogue_style 决定对白风格，narration_policy 决定旁白处理方式。"
                 "只返回 JSON 数组，不要 Markdown，不要解释。"
                 "数组元素只能使用 action、dialogue、note。"
                 "对白的 character_id 必须来自输入 characters_present。"
@@ -357,4 +361,21 @@ def summarize_character(character: dict[str, Any]) -> dict[str, Any]:
         "description": character.get("description", ""),
         "motivation": character.get("motivation", ""),
         "voice": character.get("voice", ""),
+    }
+
+
+def summarize_adaptation(document: dict[str, Any]) -> dict[str, Any]:
+    """Build a compact adaptation-strategy payload to steer scene drafting."""
+
+    adaptation = document.get("adaptation")
+    adaptation = adaptation if isinstance(adaptation, dict) else {}
+    strategy = adaptation.get("strategy")
+    strategy = strategy if isinstance(strategy, dict) else {}
+    return {
+        "target_format": adaptation.get("target_format", "screenplay"),
+        "target_runtime_min": adaptation.get("target_runtime_min"),
+        "fidelity": strategy.get("fidelity", "balanced"),
+        "pacing": strategy.get("pacing", "compressed"),
+        "dialogue_style": strategy.get("dialogue_style", "natural"),
+        "narration_policy": strategy.get("narration_policy", "convert_to_action_or_dialogue"),
     }
