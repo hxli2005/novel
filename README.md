@@ -79,6 +79,8 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo \
   --target-format microdrama_episode --fidelity faithful --pacing fast --runtime 2
 ```
 
+这些参数除写入 `adaptation` 块外，配置 LLM provider 后还会**注入逐场扩写的 prompt**：体裁（target_format）、还原度（fidelity）、节奏与对白密度（pacing）、对白风格与旁白处理都会据此影响实际生成的剧本片段。`mock` 离线扩写不受影响。
+
 ## DeepSeek Provider 配置
 
 项目支持 DeepSeek OpenAI 兼容接口。复制 `.env.example` 后在本地 shell 中导出环境变量：
