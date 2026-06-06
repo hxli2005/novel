@@ -96,3 +96,44 @@ def test_parse_command_rejects_fewer_than_three_chapters(tmp_path: Path) -> None
 
     assert result.exit_code != 0
     assert "At least 3 chapters are required" in result.output
+
+
+def test_analyze_command_writes_entity_analysis_outputs(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    parse_result = runner.invoke(app, ["parse", str(source), "--out", str(output_dir)])
+    analyze_result = runner.invoke(app, ["analyze", str(output_dir)])
+
+    assert parse_result.exit_code == 0
+    assert analyze_result.exit_code == 0
+    assert "Analyzed chapters: 3" in analyze_result.stdout
+    assert (output_dir / "intermediates" / "chapter_analysis.yaml").is_file()
+    assert (output_dir / "intermediates" / "characters.yaml").is_file()
+    assert (output_dir / "intermediates" / "locations.yaml").is_file()
+
+    characters_text = (output_dir / "intermediates" / "characters.yaml").read_text(encoding="utf-8")
+    locations_text = (output_dir / "intermediates" / "locations.yaml").read_text(encoding="utf-8")
+    assert 'name: "林青"' in characters_text
+    assert 'name: "顾明远"' in characters_text
+    assert 'name: "档案室"' in locations_text
+
+
+def test_analyze_command_requires_staged_source(tmp_path: Path) -> None:
+    workspace = tmp_path / "run"
+    workspace.mkdir()
+
+    result = runner.invoke(app, ["analyze", str(workspace)])
+
+    assert result.exit_code != 0
+    assert "No staged source file found. Run novel2script parse first." in result.output

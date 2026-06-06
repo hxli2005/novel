@@ -26,10 +26,11 @@
 uv run novel2script --help
 uv run novel2script status
 uv run novel2script parse examples/novels/three_chapters.txt --out runs/demo
+uv run novel2script analyze runs/demo
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
 
 ## 下一步建议
 
-1. 实现实体抽取、场景大纲生成、逐场剧本生成和 YAML 校验流程。
+1. 实现场景大纲生成、逐场剧本生成和 YAML 校验流程。
 2. 按 PR 规范拆分为多个小功能逐步提交。
