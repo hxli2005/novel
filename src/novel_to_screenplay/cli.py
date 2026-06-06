@@ -18,6 +18,7 @@ from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
     write_entity_analysis_outputs,
 )
+from novel_to_screenplay.pipeline.scene_drafter import draft_screenplay_scenes
 from novel_to_screenplay.pipeline.scene_outliner import (
     build_scene_outline,
     write_scene_outline_yaml,
@@ -27,7 +28,10 @@ from novel_to_screenplay.pipeline.screenplay_generator import (
     build_screenplay_document,
     write_screenplay_yaml,
 )
-from novel_to_screenplay.pipeline.screenplay_validator import validate_screenplay_file
+from novel_to_screenplay.pipeline.screenplay_validator import (
+    load_yaml_document,
+    validate_screenplay_file,
+)
 from novel_to_screenplay.providers import (
     ChatMessage,
     ProviderError,
@@ -357,6 +361,60 @@ def generate(
 
     console.print(f"Generated screenplay: {output_path}")
     console.print(f"Scenes: {len(outline_result.scenes)}")
+
+
+@app.command("draft-scenes")
+def draft_scenes(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory containing output/screenplay.yaml.",
+        ),
+    ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option("--provider", help="Provider used to draft scene scripts."),
+    ] = "mock",
+    max_tokens: Annotated[
+        int,
+        typer.Option("--max-tokens", min=1, help="Maximum tokens per drafted scene."),
+    ] = 2048,
+    scene_limit: Annotated[
+        int | None,
+        typer.Option("--scene-limit", min=1, help="Draft only the first N scenes."),
+    ] = None,
+) -> None:
+    """Draft screenplay scene scripts with an LLM provider."""
+
+    layout = build_workspace_layout(workspace)
+    screenplay_path = layout.output_dir / "screenplay.yaml"
+    if not screenplay_path.is_file():
+        console.print("No screenplay file found. Run novel2script generate first.")
+        raise typer.Exit(1)
+
+    try:
+        document = load_yaml_document(screenplay_path)
+        if not isinstance(document, dict):
+            raise ProviderError("screenplay YAML must contain a top-level object.")
+        llm_provider = build_provider(provider)
+        result = draft_screenplay_scenes(
+            document,
+            llm_provider,
+            max_tokens=max_tokens,
+            scene_limit=scene_limit,
+        )
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
+
+    write_screenplay_yaml(result.document, screenplay_path)
+    console.print(f"Drafted scenes: {len(result.drafted_scene_ids)}")
+    console.print(f"Provider: {result.provider}")
+    console.print(f"Model: {result.model}")
+    console.print(f"Wrote: {screenplay_path}")
 
 
 @app.command()
