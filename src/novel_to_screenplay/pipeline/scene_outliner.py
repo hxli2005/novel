@@ -10,7 +10,7 @@ from typing import Any
 from novel_to_screenplay.pipeline.chapter_parser import quote_yaml_scalar
 from novel_to_screenplay.pipeline.entity_analyzer import ChapterAnalysis, EntityAnalysis
 from novel_to_screenplay.providers import ChatMessage, MockProvider
-from novel_to_screenplay.structured_output import complete_json
+from novel_to_screenplay.structured_output import StructuredOutputError, complete_json
 
 LOCATION_MODES = {"INT", "EXT", "INT_EXT", "UNKNOWN"}
 TIMES_OF_DAY = {"DAY", "NIGHT", "MORNING", "EVENING", "CONTINUOUS", "LATER", "UNKNOWN"}
@@ -80,12 +80,17 @@ def build_scene_outline(analysis: EntityAnalysis) -> SceneOutline:
     return SceneOutline(scenes=scenes)
 
 
-def build_scene_outline_auto(analysis: EntityAnalysis, provider: Any) -> SceneOutline:
+def build_scene_outline_auto(
+    analysis: EntityAnalysis,
+    provider: Any,
+    *,
+    adaptation: dict[str, Any] | None = None,
+) -> SceneOutline:
     """Build the outline with the LLM provider, falling back to rules for mock."""
 
     if provider is None or isinstance(provider, MockProvider):
         return build_scene_outline(analysis)
-    return build_scene_outline_with_llm(analysis, provider)
+    return build_scene_outline_with_llm(analysis, provider, adaptation=adaptation)
 
 
 def build_scene_outline_with_llm(
@@ -93,13 +98,16 @@ def build_scene_outline_with_llm(
     provider: Any,
     *,
     max_tokens: int = 2048,
+    adaptation: dict[str, Any] | None = None,
 ) -> SceneOutline:
     """Generate a scene outline with an LLM, validating every id it returns.
 
     The model may split a chapter into several scenes or merge chapters, but
     all chapter, character, location, and event references are checked against
-    the analysis so downstream id integrity holds. If the model returns nothing
-    usable, the rule-based outline is used as a fallback.
+    the analysis so downstream id integrity holds. The ``adaptation`` hint
+    (target_format, pacing) steers how densely chapters are split into scenes.
+    If the model returns nothing usable, the rule-based outline is used as a
+    fallback.
     """
 
     valid_chapter_ids = {chapter.chapter_id for chapter in analysis.chapter_analyses}
@@ -110,13 +118,18 @@ def build_scene_outline_with_llm(
         event.id for chapter in analysis.chapter_analyses for event in chapter.events
     }
 
-    raw_scenes = complete_json(
-        provider,
-        build_outline_prompt(analysis),
-        expect="array",
-        temperature=0.3,
-        max_tokens=max_tokens,
-    )
+    try:
+        raw_scenes = complete_json(
+            provider,
+            build_outline_prompt(analysis, adaptation),
+            expect="array",
+            temperature=0.3,
+            max_tokens=max_tokens,
+        )
+    except StructuredOutputError:
+        # The model returned nothing parseable even after a repair attempt;
+        # fall back to the deterministic rule-based outline as promised.
+        return build_scene_outline(analysis)
 
     scenes: list[OutlineScene] = []
     order = 1
@@ -172,7 +185,10 @@ def build_scene_outline_with_llm(
     return SceneOutline(scenes=scenes)
 
 
-def build_outline_prompt(analysis: EntityAnalysis) -> list[ChatMessage]:
+def build_outline_prompt(
+    analysis: EntityAnalysis,
+    adaptation: dict[str, Any] | None = None,
+) -> list[ChatMessage]:
     """Build the provider prompt for outline generation."""
 
     character_ids_by_name = {character.name: character.id for character in analysis.characters}
@@ -197,6 +213,10 @@ def build_outline_prompt(analysis: EntityAnalysis) -> list[ChatMessage]:
         for chapter in analysis.chapter_analyses
     ]
     payload = {
+        "adaptation": {
+            "target_format": (adaptation or {}).get("target_format", "screenplay"),
+            "pacing": (adaptation or {}).get("pacing", "balanced"),
+        },
         "characters": [
             {"id": character.id, "name": character.name} for character in analysis.characters
         ],
@@ -225,6 +245,9 @@ def build_outline_prompt(analysis: EntityAnalysis) -> list[ChatMessage]:
             content=(
                 "你是专业的中文剧本结构师。请基于章节分析规划场景顺序，"
                 "一章可拆成多场或多章合并为一场。"
+                "请按 adaptation 控制分场密度：pacing 为 fast/compressed 时倾向合并、减少场次，"
+                "slow_burn 时倾向拆分、增加场次；target_format 为 microdrama_episode 时"
+                "倾向多个短场。"
                 "只返回 JSON 数组，每个元素符合 output_contract，不要 Markdown，不要解释。"
                 "所有 id 必须来自输入，不要编造。"
             ),

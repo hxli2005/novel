@@ -105,6 +105,12 @@ def _generation_options(
     )
 
 
+def _outline_adaptation(target_format: TargetFormat, pacing: Pacing) -> dict[str, str]:
+    """Hint passed to the LLM outliner so pacing/format steer scene density."""
+
+    return {"target_format": target_format.value, "pacing": pacing.value}
+
+
 TargetFormatOption = Annotated[
     TargetFormat,
     typer.Option("--target-format", help="Adaptation target format (e.g. microdrama_episode)."),
@@ -238,7 +244,11 @@ def run(
         llm_provider = build_provider(provider)
         analysis = analyze_chapters_auto(chapters, llm_provider)
         write_entity_analysis_outputs(analysis, layout.intermediates_dir)
-        outline = build_scene_outline_auto(analysis, llm_provider)
+        outline = build_scene_outline_auto(
+            analysis,
+            llm_provider,
+            adaptation=_outline_adaptation(target_format, pacing),
+        )
         write_scene_outline_yaml(outline, scene_outline_path)
         screenplay = build_screenplay_document(
             chapters,
@@ -433,6 +443,8 @@ def outline(
             "an LLM provider plans scenes from the chapter analysis.",
         ),
     ] = "mock",
+    target_format: TargetFormatOption = TargetFormat.screenplay,
+    pacing: PacingOption = Pacing.compressed,
 ) -> None:
     """Generate a first-pass scene outline file."""
 
@@ -451,7 +463,11 @@ def outline(
     try:
         llm_provider = build_provider(provider)
         analysis = analyze_chapters_auto(chapters, llm_provider)
-        outline_result = build_scene_outline_auto(analysis, llm_provider)
+        outline_result = build_scene_outline_auto(
+            analysis,
+            llm_provider,
+            adaptation=_outline_adaptation(target_format, pacing),
+        )
     except ProviderError as exc:
         console.print(str(exc))
         raise typer.Exit(1) from exc
