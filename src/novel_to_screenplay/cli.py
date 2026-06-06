@@ -27,6 +27,7 @@ from novel_to_screenplay.pipeline.screenplay_generator import (
     build_screenplay_document,
     write_screenplay_yaml,
 )
+from novel_to_screenplay.pipeline.screenplay_validator import validate_screenplay_file
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
     find_staged_source_file,
@@ -300,6 +301,48 @@ def generate(
 
     console.print(f"Generated screenplay: {output_path}")
     console.print(f"Scenes: {len(outline_result.scenes)}")
+
+
+@app.command()
+def validate(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory containing output/screenplay.yaml.",
+        ),
+    ] = Path("runs/demo"),
+    schema: Annotated[
+        Path,
+        typer.Option(
+            "--schema",
+            help="Path to the screenplay JSON Schema file.",
+        ),
+    ] = Path("schemas/screenplay.schema.json"),
+) -> None:
+    """Validate output/screenplay.yaml against schema and ID references."""
+
+    layout = build_workspace_layout(workspace)
+    screenplay_path = layout.output_dir / "screenplay.yaml"
+    if not screenplay_path.is_file():
+        console.print("No screenplay file found. Run novel2script generate first.")
+        raise typer.Exit(1)
+    if not schema.is_file():
+        console.print(f"No schema file found: {schema}")
+        raise typer.Exit(1)
+
+    result = validate_screenplay_file(screenplay_path, schema)
+    if result.passed:
+        console.print(f"Validation passed: {screenplay_path}")
+        console.print(f"Schema: {schema}")
+        return
+
+    console.print(f"Validation failed: {len(result.issues)} issue(s)")
+    for issue in result.issues:
+        console.print(f"- {issue.code} {issue.path}: {issue.message}")
+    raise typer.Exit(1)
 
 
 def main() -> None:
