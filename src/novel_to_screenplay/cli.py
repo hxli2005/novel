@@ -20,11 +20,13 @@ from novel_to_screenplay.pipeline.consistency import (
 )
 from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
+    analyze_chapters_auto,
     write_entity_analysis_outputs,
 )
 from novel_to_screenplay.pipeline.scene_drafter import draft_screenplay_scenes
 from novel_to_screenplay.pipeline.scene_outliner import (
     build_scene_outline,
+    build_scene_outline_auto,
     write_scene_outline_yaml,
 )
 from novel_to_screenplay.pipeline.screenplay_generator import (
@@ -156,22 +158,21 @@ def run(
     parsed_chapters_path = layout.intermediates_dir / "parsed_chapters.yaml"
     write_parsed_chapters_yaml(chapters, parsed_chapters_path)
 
-    analysis = analyze_chapters(chapters)
-    write_entity_analysis_outputs(analysis, layout.intermediates_dir)
-    outline = build_scene_outline(analysis)
     scene_outline_path = layout.intermediates_dir / "scene_outline.yaml"
-    write_scene_outline_yaml(outline, scene_outline_path)
-    screenplay = build_screenplay_document(
-        chapters,
-        analysis,
-        outline,
-        ScreenplayGenerationOptions(title=title, author=author),
-    )
     screenplay_path = layout.output_dir / "screenplay.yaml"
-    write_screenplay_yaml(screenplay, screenplay_path)
-
     try:
         llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+        write_entity_analysis_outputs(analysis, layout.intermediates_dir)
+        outline = build_scene_outline_auto(analysis, llm_provider)
+        write_scene_outline_yaml(outline, scene_outline_path)
+        screenplay = build_screenplay_document(
+            chapters,
+            analysis,
+            outline,
+            ScreenplayGenerationOptions(title=title, author=author),
+        )
+        write_screenplay_yaml(screenplay, screenplay_path)
         draft_result = draft_screenplay_scenes(
             screenplay,
             llm_provider,
@@ -294,6 +295,14 @@ def analyze(
             help="Workspace directory produced by `novel2script parse`.",
         ),
     ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="Provider for entity extraction. 'mock' uses offline rules; "
+            "an LLM provider analyzes each chapter.",
+        ),
+    ] = "mock",
 ) -> None:
     """Extract first-pass entities and chapter analysis files."""
 
@@ -309,12 +318,18 @@ def analyze(
     except ChapterParseError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    analysis = analyze_chapters(chapters)
+    try:
+        llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
     write_entity_analysis_outputs(analysis, layout.intermediates_dir)
 
     console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
+    console.print(f"Provider: {provider}")
     console.print(f"Wrote: {layout.intermediates_dir / 'chapter_analysis.yaml'}")
 
 
@@ -329,6 +344,14 @@ def outline(
             help="Workspace directory produced by `novel2script parse`.",
         ),
     ] = Path("runs/demo"),
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="Provider for analysis and outlining. 'mock' uses offline rules; "
+            "an LLM provider plans scenes from the chapter analysis.",
+        ),
+    ] = "mock",
 ) -> None:
     """Generate a first-pass scene outline file."""
 
@@ -344,12 +367,18 @@ def outline(
     except ChapterParseError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    analysis = analyze_chapters(chapters)
-    outline_result = build_scene_outline(analysis)
+    try:
+        llm_provider = build_provider(provider)
+        analysis = analyze_chapters_auto(chapters, llm_provider)
+        outline_result = build_scene_outline_auto(analysis, llm_provider)
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
     output_path = layout.intermediates_dir / "scene_outline.yaml"
     write_scene_outline_yaml(outline_result, output_path)
 
     console.print(f"Outlined scenes: {len(outline_result.scenes)}")
+    console.print(f"Provider: {provider}")
     console.print(f"Wrote: {output_path}")
 
 

@@ -45,6 +45,12 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 `run` 会直接产出**已扩写、已校验**的剧本初稿，写入 `runs/demo/output/screenplay.yaml`；上面分步命令用于需要逐阶段检查或人工介入的场景。
 
+`run` 全程使用同一个 `--provider`：`mock` 时实体抽取与分场走离线规则（仅适用于内置示例），配置 DeepSeek 后使用 `--provider deepseek`，则**分析、分场、逐场扩写全部由模型驱动**，可泛化到任意题材小说：
+
+```bash
+uv run novel2script run path/to/novel.txt --out runs/demo --provider deepseek
+```
+
 `check` 对生成的剧本做故事级一致性检查（确定性、离线），并把发现写入 `quality_report.warnings`，供作者复核：
 
 - `CHAPTER_NOT_ADAPTED`：某章节未被任何场景改编（可能遗漏剧情）。
@@ -63,10 +69,16 @@ export DEEPSEEK_MODEL=deepseek-v4-pro
 export DEEPSEEK_BASE_URL=https://api.deepseek.com
 export DEEPSEEK_THINKING=disabled
 uv run novel2script check-provider --provider deepseek
+uv run novel2script analyze runs/demo --provider deepseek
+uv run novel2script outline runs/demo --provider deepseek
 uv run novel2script draft-scenes runs/demo --provider deepseek --max-tokens 2048
 ```
 
 `DEEPSEEK_THINKING` 默认为 `disabled`，用于让连通性检查和后续剧本扩写直接返回 `content`。如需开启 DeepSeek thinking mode，可设为 `enabled`，但需要为推理内容预留更高 `max_tokens`。
+
+`analyze` 默认使用 `mock`（离线规则）抽取人物、地点与伏笔；这套规则只对内置示例小说有效。配置 DeepSeek 后使用 `--provider deepseek`，则逐章调用模型抽取要素，可泛化到任意题材的小说。
+
+`outline` 同样支持 `--provider deepseek`：模型基于章节分析规划场景顺序（一章可拆多场或多章合并），并对返回的章节、人物、地点、事件 id 做引用校验，保证下游 id 一致；`mock` 仍走规则型一章一场。
 
 `draft-scenes` 会读取 `runs/demo/output/screenplay.yaml`，逐场替换 `script` 内容。使用 `--provider mock` 可离线演示，配置 DeepSeek 后可使用 `--provider deepseek` 调用真实模型。
 

@@ -1,12 +1,19 @@
-"""Rule-based scene outline generation."""
+"""Scene outline generation (rule-based and LLM-based)."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from novel_to_screenplay.pipeline.chapter_parser import quote_yaml_scalar
 from novel_to_screenplay.pipeline.entity_analyzer import ChapterAnalysis, EntityAnalysis
+from novel_to_screenplay.providers import ChatMessage, MockProvider
+from novel_to_screenplay.structured_output import complete_json
+
+LOCATION_MODES = {"INT", "EXT", "INT_EXT", "UNKNOWN"}
+TIMES_OF_DAY = {"DAY", "NIGHT", "MORNING", "EVENING", "CONTINUOUS", "LATER", "UNKNOWN"}
 
 PRIMARY_LOCATION_PRIORITY = [
     "档案室",
@@ -71,6 +78,190 @@ def build_scene_outline(analysis: EntityAnalysis) -> SceneOutline:
         for index, chapter_analysis in enumerate(analysis.chapter_analyses, start=1)
     ]
     return SceneOutline(scenes=scenes)
+
+
+def build_scene_outline_auto(analysis: EntityAnalysis, provider: Any) -> SceneOutline:
+    """Build the outline with the LLM provider, falling back to rules for mock."""
+
+    if provider is None or isinstance(provider, MockProvider):
+        return build_scene_outline(analysis)
+    return build_scene_outline_with_llm(analysis, provider)
+
+
+def build_scene_outline_with_llm(
+    analysis: EntityAnalysis,
+    provider: Any,
+    *,
+    max_tokens: int = 2048,
+) -> SceneOutline:
+    """Generate a scene outline with an LLM, validating every id it returns.
+
+    The model may split a chapter into several scenes or merge chapters, but
+    all chapter, character, location, and event references are checked against
+    the analysis so downstream id integrity holds. If the model returns nothing
+    usable, the rule-based outline is used as a fallback.
+    """
+
+    valid_chapter_ids = {chapter.chapter_id for chapter in analysis.chapter_analyses}
+    valid_character_ids = {character.id for character in analysis.characters}
+    valid_location_ids = {location.id for location in analysis.locations}
+    location_names_by_id = {location.id: location.name for location in analysis.locations}
+    valid_event_ids = {
+        event.id for chapter in analysis.chapter_analyses for event in chapter.events
+    }
+
+    raw_scenes = complete_json(
+        provider,
+        build_outline_prompt(analysis),
+        expect="array",
+        temperature=0.3,
+        max_tokens=max_tokens,
+    )
+
+    scenes: list[OutlineScene] = []
+    order = 1
+    for raw_scene in raw_scenes:
+        if not isinstance(raw_scene, dict):
+            continue
+        chapter_refs = [
+            chapter_id
+            for chapter_id in as_str_list(raw_scene.get("chapter_refs"))
+            if chapter_id in valid_chapter_ids
+        ]
+        summary = raw_scene.get("summary")
+        if not chapter_refs or not isinstance(summary, str) or not summary.strip():
+            continue
+
+        location_id = raw_scene.get("location_id")
+        if location_id not in valid_location_ids:
+            location_id = None
+        display = raw_scene.get("display")
+        if not isinstance(display, str) or not display.strip():
+            display = location_names_by_id.get(location_id, "未知地点")
+
+        scenes.append(
+            OutlineScene(
+                id=f"sc_{order:03d}",
+                order=order,
+                chapter_refs=chapter_refs,
+                scene_heading=SceneHeading(
+                    location_mode=normalize_enum(raw_scene.get("location_mode"), LOCATION_MODES),
+                    location_id=location_id,
+                    display=display.strip(),
+                    time_of_day=normalize_enum(raw_scene.get("time_of_day"), TIMES_OF_DAY),
+                ),
+                summary=summary.strip(),
+                dramatic_function=normalize_dramatic_function(raw_scene.get("dramatic_function")),
+                characters_present=[
+                    character_id
+                    for character_id in as_str_list(raw_scene.get("characters_present"))
+                    if character_id in valid_character_ids
+                ],
+                required_events=[
+                    event_id
+                    for event_id in as_str_list(raw_scene.get("required_event_ids"))
+                    if event_id in valid_event_ids
+                ],
+                setup_notes=as_str_list(raw_scene.get("setup_notes")),
+            )
+        )
+        order += 1
+
+    if not scenes:
+        return build_scene_outline(analysis)
+    return SceneOutline(scenes=scenes)
+
+
+def build_outline_prompt(analysis: EntityAnalysis) -> list[ChatMessage]:
+    """Build the provider prompt for outline generation."""
+
+    character_ids_by_name = {character.name: character.id for character in analysis.characters}
+    location_ids_by_name = {location.name: location.id for location in analysis.locations}
+    chapters_payload = [
+        {
+            "chapter_id": chapter.chapter_id,
+            "summary": chapter.summary,
+            "character_ids": [
+                character_ids_by_name[name]
+                for name in chapter.characters
+                if name in character_ids_by_name
+            ],
+            "location_ids": [
+                location_ids_by_name[name]
+                for name in chapter.locations
+                if name in location_ids_by_name
+            ],
+            "events": [{"id": event.id, "summary": event.summary} for event in chapter.events],
+            "possible_setups": [setup.summary for setup in chapter.possible_setups],
+        }
+        for chapter in analysis.chapter_analyses
+    ]
+    payload = {
+        "characters": [
+            {"id": character.id, "name": character.name} for character in analysis.characters
+        ],
+        "locations": [
+            {"id": location.id, "name": location.name} for location in analysis.locations
+        ],
+        "chapters": chapters_payload,
+        "output_contract": [
+            {
+                "chapter_refs": ["来自 chapters 的 chapter_id，至少一个"],
+                "location_id": "来自 locations 的 id，可省略",
+                "display": "场景地点显示名",
+                "location_mode": "INT | EXT | INT_EXT | UNKNOWN",
+                "time_of_day": "DAY | NIGHT | MORNING | EVENING | CONTINUOUS | LATER | UNKNOWN",
+                "summary": "本场一句话剧情",
+                "dramatic_function": "如 inciting_incident、development、payoff",
+                "characters_present": ["来自 characters 的 id"],
+                "required_event_ids": ["来自对应章节 events 的 id"],
+                "setup_notes": ["与本场相关的伏笔说明，可为空"],
+            }
+        ],
+    }
+    return [
+        ChatMessage(
+            role="system",
+            content=(
+                "你是专业的中文剧本结构师。请基于章节分析规划场景顺序，"
+                "一章可拆成多场或多章合并为一场。"
+                "只返回 JSON 数组，每个元素符合 output_contract，不要 Markdown，不要解释。"
+                "所有 id 必须来自输入，不要编造。"
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
+        ),
+    ]
+
+
+def as_str_list(value: Any) -> list[str]:
+    """Coerce a provider value into a list of non-empty strings."""
+
+    if not isinstance(value, list):
+        return []
+    items = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            items.append(item.strip())
+    return items
+
+
+def normalize_enum(value: Any, allowed: set[str]) -> str:
+    """Return an uppercased value when it is in the allowed set, else UNKNOWN."""
+
+    if isinstance(value, str) and value.strip().upper() in allowed:
+        return value.strip().upper()
+    return "UNKNOWN"
+
+
+def normalize_dramatic_function(value: Any) -> str:
+    """Normalize the dramatic function label."""
+
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "development"
 
 
 def build_scene_from_chapter_analysis(

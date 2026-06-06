@@ -1,14 +1,19 @@
-"""Rule-based entity and chapter analysis extraction."""
+"""Entity and chapter analysis extraction (rule-based and LLM-based)."""
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from novel_to_screenplay.pipeline.chapter_parser import ParsedChapter, quote_yaml_scalar
+from novel_to_screenplay.providers import ChatMessage, MockProvider
+from novel_to_screenplay.structured_output import complete_json
 
 MAX_EVENTS_PER_CHAPTER = 3
+MAX_ENTITY_NAME_LENGTH = 40
 
 PERSON_STOPWORDS = {
     "主角",
@@ -149,6 +154,157 @@ def analyze_chapters(chapters: list[ParsedChapter]) -> EntityAnalysis:
         characters=build_entities("char", character_sources),
         locations=build_entities("loc", location_sources),
     )
+
+
+def analyze_chapters_auto(chapters: list[ParsedChapter], provider: Any) -> EntityAnalysis:
+    """Analyze chapters with the LLM provider, falling back to rules for mock."""
+
+    if provider is None or isinstance(provider, MockProvider):
+        return analyze_chapters(chapters)
+    return analyze_chapters_with_llm(chapters, provider)
+
+
+def analyze_chapters_with_llm(
+    chapters: list[ParsedChapter],
+    provider: Any,
+    *,
+    max_tokens: int = 1024,
+) -> EntityAnalysis:
+    """Extract chapter analyses and entities using an LLM provider.
+
+    Each chapter is analyzed independently so prompts stay small and the work
+    scales to longer novels. Results are aggregated into the same structures
+    the rule-based path produces, keeping downstream stages unchanged.
+    """
+
+    chapter_analyses: list[ChapterAnalysis] = []
+    character_sources: dict[str, set[str]] = {}
+    location_sources: dict[str, set[str]] = {}
+    event_counter = 1
+
+    for chapter in chapters:
+        payload = extract_chapter_payload(provider, chapter, max_tokens=max_tokens)
+        characters = normalize_name_list(payload.get("characters"))
+        locations = normalize_name_list(payload.get("locations"))
+
+        events = []
+        for event_summary in normalize_text_list(payload.get("events"))[:MAX_EVENTS_PER_CHAPTER]:
+            events.append(ExtractedEvent(id=f"evt_raw_{event_counter:03d}", summary=event_summary))
+            event_counter += 1
+
+        possible_setups = [
+            SetupCandidate(summary=setup)
+            for setup in normalize_text_list(payload.get("possible_setups"))
+        ]
+
+        summary = payload.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            summary = build_chapter_summary(chapter)
+        else:
+            summary = truncate_text(" ".join(summary.split()), 90)
+
+        for character in characters:
+            character_sources.setdefault(character, set()).add(chapter.id)
+        for location in locations:
+            location_sources.setdefault(location, set()).add(chapter.id)
+
+        chapter_analyses.append(
+            ChapterAnalysis(
+                chapter_id=chapter.id,
+                summary=summary,
+                characters=characters,
+                locations=locations,
+                events=events,
+                possible_setups=possible_setups,
+            )
+        )
+
+    return EntityAnalysis(
+        chapter_analyses=chapter_analyses,
+        characters=build_entities("char", character_sources),
+        locations=build_entities("loc", location_sources),
+    )
+
+
+def extract_chapter_payload(
+    provider: Any,
+    chapter: ParsedChapter,
+    *,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """Ask the provider to extract one chapter's analysis as a JSON object."""
+
+    payload = complete_json(
+        provider,
+        build_chapter_analysis_prompt(chapter),
+        expect="object",
+        temperature=0.1,
+        max_tokens=max_tokens,
+    )
+    return payload if isinstance(payload, dict) else {}
+
+
+def build_chapter_analysis_prompt(chapter: ParsedChapter) -> list[ChatMessage]:
+    """Build the provider prompt for analyzing one chapter."""
+
+    payload = {
+        "chapter": {
+            "id": chapter.id,
+            "title": chapter.title,
+            "text": chapter.text,
+        },
+        "output_contract": {
+            "summary": "本章一句话剧情梗概",
+            "characters": ["出场人物姓名，去重"],
+            "locations": ["关键场景地点"],
+            "events": ["按时间顺序的关键事件，最多 3 条"],
+            "possible_setups": ["可能的伏笔或线索，没有则返回空数组"],
+        },
+    }
+    return [
+        ChatMessage(
+            role="system",
+            content=(
+                "你是专业的中文小说改编分析助手。请阅读章节，抽取改编所需的结构化要素。"
+                "只返回符合 output_contract 的 JSON 对象，不要 Markdown，不要解释。"
+                "characters 只填真实出场的人物姓名，不要填代词或称谓。"
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
+        ),
+    ]
+
+
+def normalize_name_list(values: Any) -> list[str]:
+    """Normalize a provider-supplied list of entity names."""
+
+    if not isinstance(values, list):
+        return []
+    names = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        name = value.strip()
+        if name and len(name) <= MAX_ENTITY_NAME_LENGTH:
+            names.append(name)
+    return sorted_unique(names)
+
+
+def normalize_text_list(values: Any) -> list[str]:
+    """Normalize a provider-supplied list of free-text summaries."""
+
+    if not isinstance(values, list):
+        return []
+    summaries = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        summary = " ".join(value.split())
+        if summary:
+            summaries.append(truncate_text(summary, 90))
+    return sorted_unique(summaries)
 
 
 def extract_character_names(text: str) -> list[str]:
