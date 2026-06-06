@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from novel_to_screenplay import __version__
@@ -216,3 +217,52 @@ def test_generate_command_writes_screenplay_yaml(tmp_path: Path) -> None:
     assert 'title: "第七页"' in screenplay_text
     assert "quality_report:" in screenplay_text
     assert "script:" in screenplay_text
+
+
+def test_validate_command_accepts_generated_screenplay_yaml(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    run_result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+    validate_result = runner.invoke(app, ["validate", str(output_dir)])
+
+    assert run_result.exit_code == 0
+    assert validate_result.exit_code == 0
+    assert "Validation passed:" in validate_result.stdout
+
+
+def test_validate_command_reports_unknown_id_references(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    run_result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+    document["scenes"][0]["characters_present"] = ["char_missing"]
+    screenplay_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    validate_result = runner.invoke(app, ["validate", str(output_dir)])
+
+    assert run_result.exit_code == 0
+    assert validate_result.exit_code != 0
+    assert "Validation failed:" in validate_result.stdout
+    assert "UNKNOWN_CHARACTER_REF" in validate_result.stdout
