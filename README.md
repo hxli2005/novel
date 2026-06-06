@@ -31,6 +31,7 @@ uv run novel2script parse examples/novels/three_chapters.txt --out runs/demo
 uv run novel2script analyze runs/demo
 uv run novel2script outline runs/demo
 uv run novel2script generate runs/demo --title 第七页 --author 示例作者
+uv run novel2script draft-scenes runs/demo --provider mock
 uv run novel2script validate runs/demo
 uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --provider mock
 ```
@@ -47,13 +48,14 @@ export DEEPSEEK_MODEL=deepseek-v4-pro
 export DEEPSEEK_BASE_URL=https://api.deepseek.com
 export DEEPSEEK_THINKING=disabled
 uv run novel2script check-provider --provider deepseek
+uv run novel2script draft-scenes runs/demo --provider deepseek --max-tokens 2048
 ```
 
 `DEEPSEEK_THINKING` 默认为 `disabled`，用于让连通性检查和后续剧本扩写直接返回 `content`。如需开启 DeepSeek thinking mode，可设为 `enabled`，但需要为推理内容预留更高 `max_tokens`。
 
-当前版本先完成 provider 抽象和连通性检查；规则型剧本生成仍可离线运行。下一步会把 DeepSeek 接入逐场剧本扩写。
+`draft-scenes` 会读取 `runs/demo/output/screenplay.yaml`，逐场替换 `script` 内容。使用 `--provider mock` 可离线演示，配置 DeepSeek 后可使用 `--provider deepseek` 调用真实模型。
 
 ## 下一步建议
 
-1. 使用 DeepSeek Provider 实现逐场剧本扩写 Prompt。
+1. 增加故事级一致性检查，复核伏笔、人物弧光和跨场因果链。
 2. 按 PR 规范拆分为多个小功能逐步提交。

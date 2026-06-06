@@ -285,6 +285,45 @@ def test_validate_command_accepts_generated_screenplay_yaml(tmp_path: Path) -> N
     assert "Validation passed:" in validate_result.stdout
 
 
+def test_draft_scenes_command_updates_screenplay_and_still_validates(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。周叔说不要再查。",
+                "第二章 药品库\n林青进入药品库。主刀医生顾明远的名字出现。",
+                "第三章 天台\n赵岚走上天台。林青按下录音笔。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+
+    run_result = runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+    draft_result = runner.invoke(app, ["draft-scenes", str(output_dir), "--provider", "mock"])
+    validate_result = runner.invoke(app, ["validate", str(output_dir)])
+
+    screenplay_path = output_dir / "output" / "screenplay.yaml"
+    document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
+
+    assert run_result.exit_code == 0
+    assert draft_result.exit_code == 0
+    assert validate_result.exit_code == 0
+    assert "Drafted scenes: 3" in draft_result.stdout
+    assert document["scenes"][0]["revision_status"] == "ai_drafted"
+    assert document["quality_report"]["warnings"][-1]["code"] == "AI_SCENE_DRAFTING"
+
+
+def test_draft_scenes_command_requires_screenplay_yaml(tmp_path: Path) -> None:
+    workspace = tmp_path / "run"
+    workspace.mkdir()
+
+    result = runner.invoke(app, ["draft-scenes", str(workspace)])
+
+    assert result.exit_code != 0
+    assert "No screenplay file found. Run novel2script generate first." in result.stdout
+
+
 def test_validate_command_reports_unknown_id_references(tmp_path: Path) -> None:
     source = tmp_path / "novel.txt"
     source.write_text(
