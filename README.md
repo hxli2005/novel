@@ -25,6 +25,8 @@
 ```bash
 uv run novel2script --help
 uv run novel2script status
+uv run novel2script providers
+uv run novel2script check-provider --provider mock
 uv run novel2script parse examples/novels/three_chapters.txt --out runs/demo
 uv run novel2script analyze runs/demo
 uv run novel2script outline runs/demo
@@ -35,7 +37,20 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 完整运行后，最终剧本初稿会写入 `runs/demo/output/screenplay.yaml`。
 
+## DeepSeek Provider 配置
+
+项目支持 DeepSeek OpenAI 兼容接口。复制 `.env.example` 后在本地 shell 中导出环境变量：
+
+```bash
+export DEEPSEEK_API_KEY=sk-your-deepseek-api-key
+export DEEPSEEK_MODEL=deepseek-v4-pro
+export DEEPSEEK_BASE_URL=https://api.deepseek.com
+uv run novel2script check-provider --provider deepseek
+```
+
+当前版本先完成 provider 抽象和连通性检查；规则型剧本生成仍可离线运行。下一步会把 DeepSeek 接入逐场剧本扩写。
+
 ## 下一步建议
 
-1. 接入 LLM Provider 与逐场剧本扩写 Prompt。
+1. 使用 DeepSeek Provider 实现逐场剧本扩写 Prompt。
 2. 按 PR 规范拆分为多个小功能逐步提交。

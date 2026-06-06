@@ -38,6 +38,50 @@ def test_run_dry_run_validates_input_without_creating_workspace(tmp_path: Path) 
     assert not output_dir.exists()
 
 
+def test_run_rejects_unknown_provider(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text("第一章\n故事开始。", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["run", str(source), "--provider", "unknown", "--dry-run"],
+    )
+
+    assert result.exit_code != 0
+    assert "Unsupported provider" in result.output
+
+
+def test_providers_command_lists_supported_providers() -> None:
+    result = runner.invoke(app, ["providers"], env={"DEEPSEEK_API_KEY": ""})
+
+    assert result.exit_code == 0
+    assert "mock: configured" in result.stdout
+    assert "deepseek: missing config" in result.stdout
+
+
+def test_check_provider_uses_mock_provider() -> None:
+    result = runner.invoke(
+        app,
+        ["check-provider", "--provider", "mock", "--prompt", "确认连通。"],
+    )
+
+    assert result.exit_code == 0
+    assert "Provider: mock" in result.stdout
+    assert "Model: mock" in result.stdout
+    assert "mock response: 确认连通。" in result.stdout
+
+
+def test_check_provider_reports_missing_deepseek_key() -> None:
+    result = runner.invoke(
+        app,
+        ["check-provider", "--provider", "deepseek"],
+        env={"DEEPSEEK_API_KEY": ""},
+    )
+
+    assert result.exit_code != 0
+    assert "DEEPSEEK_API_KEY is required" in result.stdout
+
+
 def test_run_executes_parse_and_analyze_pipeline(tmp_path: Path) -> None:
     source = tmp_path / "novel.md"
     source.write_text(

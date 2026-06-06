@@ -28,6 +28,12 @@ from novel_to_screenplay.pipeline.screenplay_generator import (
     write_screenplay_yaml,
 )
 from novel_to_screenplay.pipeline.screenplay_validator import validate_screenplay_file
+from novel_to_screenplay.providers import (
+    ChatMessage,
+    ProviderError,
+    build_provider,
+    get_provider_statuses,
+)
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
     find_staged_source_file,
@@ -50,6 +56,14 @@ def _validate_input_path(input_path: Path) -> Path:
         supported = ", ".join(sorted(SUPPORTED_INPUT_SUFFIXES))
         raise typer.BadParameter(f"input file must use one of: {supported}")
     return input_path
+
+
+def _validate_provider_name(provider: str) -> str:
+    try:
+        build_provider(provider, env={"DEEPSEEK_API_KEY": "placeholder"})
+    except ProviderError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return provider
 
 
 @app.callback()
@@ -108,6 +122,7 @@ def run(
     """Run the available local conversion pipeline stages."""
 
     input_path = _validate_input_path(input_path)
+    provider = _validate_provider_name(provider)
 
     if dry_run:
         console.print(
@@ -148,6 +163,47 @@ def run(
     console.print(f"Extracted characters: {len(analysis.characters)}")
     console.print(f"Extracted locations: {len(analysis.locations)}")
     console.print(f"Provider: {provider}")
+
+
+@app.command("providers")
+def providers_command() -> None:
+    """List supported LLM providers and local configuration status."""
+
+    for status in get_provider_statuses():
+        configured = "configured" if status.configured else "missing config"
+        console.print(f"{status.name}: {configured} ({status.detail})")
+
+
+@app.command("check-provider")
+def check_provider(
+    provider: Annotated[
+        str,
+        typer.Option("--provider", help="Provider name to check."),
+    ] = "mock",
+    prompt: Annotated[
+        str,
+        typer.Option("--prompt", help="Prompt used for a small provider connectivity check."),
+    ] = "请用一句话确认你可以帮助把小说改编成剧本。",
+    max_tokens: Annotated[
+        int,
+        typer.Option("--max-tokens", min=1, help="Maximum tokens for the check response."),
+    ] = 128,
+) -> None:
+    """Call a provider once to verify credentials and connectivity."""
+
+    try:
+        llm_provider = build_provider(provider)
+        completion = llm_provider.complete(
+            [ChatMessage(role="user", content=prompt)],
+            max_tokens=max_tokens,
+        )
+    except ProviderError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from exc
+
+    console.print(f"Provider: {completion.provider}")
+    console.print(f"Model: {completion.model}")
+    console.print(f"Response: {completion.text}")
 
 
 @app.command()
