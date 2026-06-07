@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import threading
 import uuid
@@ -60,6 +61,7 @@ app = FastAPI(title="Inkdraft 墨稿")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 _runs_lock = threading.Lock()
 
@@ -365,8 +367,9 @@ def _run_worker(
         _fail_run(state, "parse", message)
     except ProviderError as exc:
         _fail_run(state, current["stage"], f"模型调用失败：{exc}。可改用离线 mock 重试。")
-    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
-        _fail_run(state, current["stage"], f"转换失败：{exc}")
+    except Exception:  # noqa: BLE001 - log server-side; never leak a raw error to the user
+        logger.exception("Pipeline run failed")
+        _fail_run(state, current["stage"], "转换失败，请稍后重试。")
     finally:
         # Safety net: guarantee a terminal status so SSE clients never hang,
         # even if an error escaped the handlers above.
