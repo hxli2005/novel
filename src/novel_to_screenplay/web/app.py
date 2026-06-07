@@ -15,6 +15,7 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +112,11 @@ def _render_index(request: Request, error: str | None, status_code: int = 200) -
 
 def _render_index_error(request: Request, message: str) -> HTMLResponse:
     return _render_index(request, error=message, status_code=400)
+
+
+@app.get("/history", response_class=HTMLResponse)
+def history(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "history.html", {"runs": _list_runs()})
 
 
 @app.post("/runs", response_model=None)
@@ -451,6 +457,43 @@ def _run_output_dir(run_id: str) -> Path | None:
     if not RUN_ID_RE.fullmatch(run_id):
         return None
     return build_workspace_layout(RUNS_DIR / run_id).output_dir
+
+
+def _list_runs() -> list[dict[str, Any]]:
+    """List completed runs on disk (newest first) for the history page.
+
+    A run counts as completed once it has both a screenplay.yaml and run.json
+    (run.json is written only on success), so in-flight / failed / cancelled
+    runs are skipped. Reads run.json only — no per-run YAML parse — to stay fast.
+    """
+
+    runs: list[dict[str, Any]] = []
+    if not RUNS_DIR.is_dir():
+        return runs
+    for entry in RUNS_DIR.iterdir():
+        if not entry.is_dir() or not RUN_ID_RE.fullmatch(entry.name):
+            continue
+        layout = build_workspace_layout(entry)
+        screenplay = layout.output_dir / "screenplay.yaml"
+        if not screenplay.is_file() or not (layout.root / "run.json").is_file():
+            continue
+        meta = _read_run_meta(layout)
+        mtime = screenplay.stat().st_mtime
+        runs.append(
+            {
+                "run_id": entry.name,
+                "title": meta.get("title") or "剧本初稿",
+                "author": meta.get("author") or "",
+                "provider": meta.get("provider") or "mock",
+                "total_chapters": meta.get("total_chapters"),
+                "chapter_start": meta.get("chapter_start"),
+                "chapter_end": meta.get("chapter_end"),
+                "generated_at": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),
+                "mtime": mtime,
+            }
+        )
+    runs.sort(key=lambda r: r["mtime"], reverse=True)
+    return runs
 
 
 def _load_run(run_id: str) -> dict | None:

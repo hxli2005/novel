@@ -113,6 +113,22 @@ def test_review_button_disabled_for_mock_then_adds_story_findings(
     assert "伏笔未回收" in response.text  # the Chinese gloss for FORESHADOW_UNRESOLVED
 
 
+def test_history_lists_completed_runs_newest_first() -> None:
+    older = _run(data={"use_sample": "1", "provider": "mock", "title": "历史较早"})
+    newer = _run(data={"use_sample": "1", "provider": "mock", "title": "历史较新"})
+
+    page = client.get("/history")
+    assert page.status_code == 200
+    assert "历史较早" in page.text and "历史较新" in page.text
+    assert f"/runs/{older}" in page.text and f"/runs/{newer}" in page.text
+    # The most recently generated run is listed first.
+    assert page.text.index(f"/runs/{newer}") < page.text.index(f"/runs/{older}")
+
+
+def test_header_links_to_history() -> None:
+    assert 'href="/history"' in client.get("/").text
+
+
 def test_run_accepts_gbk_encoded_upload() -> None:
     # Chinese novels are frequently GBK-encoded; this must not return 500.
     text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"
