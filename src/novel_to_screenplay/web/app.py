@@ -6,6 +6,7 @@ Live per-stage progress (SSE) and richer interactions layer on in later steps.
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from pathlib import Path
@@ -23,6 +24,7 @@ from novel_to_screenplay.providers import ProviderError, build_provider, get_pro
 from novel_to_screenplay.runner import run_pipeline
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
+    find_staged_source_file,
     initialize_workspace,
     stage_source_file,
 )
@@ -99,6 +101,8 @@ async def create_run(
     fidelity: str = Form(default="balanced"),
     pacing: str = Form(default="compressed"),
     runtime: int = Form(default=8),
+    chapter_start: int = Form(default=1),
+    chapter_end: str = Form(default=""),
 ) -> HTMLResponse | RedirectResponse:
     run_id = uuid.uuid4().hex[:12]
     layout = initialize_workspace(RUNS_DIR / run_id)
@@ -115,32 +119,54 @@ async def create_run(
         return _render_index_error(request, "请上传一个 .txt / .md 小说文件，或使用内置示例。")
 
     staged_path = stage_source_file(source_path, layout)
-    options = ScreenplayGenerationOptions(
-        title=title or "剧本初稿",
-        author=author or "待填写",
+    error = _run_and_record(
+        layout,
+        staged_path,
+        title=title,
+        author=author,
         target_format=target_format,
         fidelity=fidelity,
         pacing=pacing,
-        target_runtime_min=int(runtime),
+        runtime=runtime,
+        provider=provider,
+        chapter_start=chapter_start,
+        chapter_end=_parse_optional_int(chapter_end),
     )
-    try:
-        provider_obj = build_provider(provider)
-        run_pipeline(
-            staged_path,
-            layout,
-            provider_obj,
-            options,
-            outline_adaptation={"target_format": target_format, "pacing": pacing},
-            schema=SCHEMA_PATH,
-        )
-    except ChapterParseError:
-        message = "未能识别到至少 3 个章节，请检查章节标记（如“第一章”）。"
-        return _render_index_error(request, message)
-    except ProviderError as exc:
-        return _render_index_error(request, f"模型调用失败：{exc}。可改用离线 mock 重试。")
-    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
-        return _render_index_error(request, f"转换失败：{exc}")
+    if error is not None:
+        return _render_index_error(request, error)
+    return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
+
+@app.post("/runs/{run_id}/rerun", response_model=None)
+def rerun(
+    request: Request,
+    run_id: str,
+    chapter_start: int = Form(default=1),
+    chapter_end: str = Form(default=""),
+) -> HTMLResponse | RedirectResponse:
+    if _run_output_dir(run_id) is None:
+        return _render_index_error(request, "找不到该剧本，请重新生成。")
+    layout = build_workspace_layout(RUNS_DIR / run_id)
+    try:
+        staged_path = find_staged_source_file(layout)
+    except FileNotFoundError:
+        return _render_index_error(request, "原文已不可用，请重新上传生成。")
+    meta = _read_run_meta(layout)
+    error = _run_and_record(
+        layout,
+        staged_path,
+        title=meta.get("title", "剧本初稿"),
+        author=meta.get("author", "待填写"),
+        target_format=meta.get("target_format", "screenplay"),
+        fidelity=meta.get("fidelity", "balanced"),
+        pacing=meta.get("pacing", "compressed"),
+        runtime=meta.get("runtime", 8),
+        provider=meta.get("provider", "mock"),
+        chapter_start=chapter_start,
+        chapter_end=_parse_optional_int(chapter_end),
+    )
+    if error is not None:
+        return _render_index_error(request, error)
     return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
 
@@ -149,10 +175,11 @@ def view_run(request: Request, run_id: str) -> HTMLResponse:
     document = _load_run(run_id)
     if document is None:
         return _render_index_error(request, "找不到该剧本，请重新生成。")
+    layout = build_workspace_layout(RUNS_DIR / run_id)
     return templates.TemplateResponse(
         request,
         "result.html",
-        {"run_id": run_id, "doc": document},
+        {"run_id": run_id, "doc": document, "meta": _read_run_meta(layout)},
     )
 
 
@@ -178,6 +205,93 @@ def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
         write_docx(document, path)
         return FileResponse(path, filename="screenplay.docx")
     return HTMLResponse("unknown format", status_code=404)
+
+
+def _parse_optional_int(value: str) -> int | None:
+    value = value.strip()
+    return int(value) if value.isdigit() else None
+
+
+def _run_and_record(
+    layout,  # noqa: ANN001 - WorkspaceLayout
+    staged_path: Path,
+    *,
+    title: str,
+    author: str,
+    target_format: str,
+    fidelity: str,
+    pacing: str,
+    runtime: int,
+    provider: str,
+    chapter_start: int,
+    chapter_end: int | None,
+) -> str | None:
+    """Run the pipeline and record run metadata; return an error message or None."""
+
+    options = ScreenplayGenerationOptions(
+        title=title or "剧本初稿",
+        author=author or "待填写",
+        target_format=target_format,
+        fidelity=fidelity,
+        pacing=pacing,
+        target_runtime_min=int(runtime),
+    )
+    try:
+        provider_obj = build_provider(provider)
+        result = run_pipeline(
+            staged_path,
+            layout,
+            provider_obj,
+            options,
+            outline_adaptation={"target_format": target_format, "pacing": pacing},
+            schema=SCHEMA_PATH,
+            chapter_start=chapter_start,
+            chapter_end=chapter_end,
+        )
+    except ChapterParseError as exc:
+        # select_chapters raises a descriptive Chinese message; the parser's
+        # whole-novel message is terser, so fall back to a friendly hint.
+        if "章" in str(exc):
+            return str(exc)
+        return "未能识别到至少 3 个章节，请检查章节标记（如“第一章”）。"
+    except ProviderError as exc:
+        return f"模型调用失败：{exc}。可改用离线 mock 重试。"
+    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
+        return f"转换失败：{exc}"
+
+    _write_run_meta(
+        layout,
+        {
+            "total_chapters": result.total_chapters,
+            "chapter_start": result.chapter_start,
+            "chapter_end": result.chapter_end,
+            "title": title,
+            "author": author,
+            "target_format": target_format,
+            "fidelity": fidelity,
+            "pacing": pacing,
+            "runtime": int(runtime),
+            "provider": provider,
+        },
+    )
+    return None
+
+
+def _write_run_meta(layout, meta: dict) -> None:  # noqa: ANN001 - WorkspaceLayout
+    (layout.root / "run.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _read_run_meta(layout) -> dict:  # noqa: ANN001 - WorkspaceLayout
+    path = layout.root / "run.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _run_output_dir(run_id: str) -> Path | None:

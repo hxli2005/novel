@@ -45,6 +45,38 @@ def test_run_accepts_gbk_encoded_upload() -> None:
     assert "质量报告" in response.text
 
 
+def _multi_chapter_novel(count: int) -> bytes:
+    return "\n\n".join(f"第{i}章 标题{i}\n内容{i}。" for i in range(1, count + 1)).encode("utf-8")
+
+
+def test_run_with_chapter_range_then_rerun() -> None:
+    novel = _multi_chapter_novel(5)
+    response = client.post(
+        "/runs",
+        data={"provider": "mock", "chapter_start": "2", "chapter_end": "4"},
+        files={"file": ("novel.txt", novel, "text/plain")},
+    )
+    assert response.status_code == 200
+    assert "原著共 5 章" in response.text
+    assert "本次转换第 2" in response.text
+
+    run_id = response.url.path.rsplit("/", 1)[-1]
+    # Re-run a different range from the already-staged source (no re-upload).
+    rerun = client.post(f"/runs/{run_id}/rerun", data={"chapter_start": "1", "chapter_end": "5"})
+    assert rerun.status_code == 200
+    assert "本次转换第 1" in rerun.text
+
+
+def test_run_rejects_too_small_chapter_range() -> None:
+    response = client.post(
+        "/runs",
+        data={"provider": "mock", "chapter_start": "1", "chapter_end": "2"},
+        files={"file": ("novel.txt", _multi_chapter_novel(5), "text/plain")},
+    )
+    assert response.status_code == 400
+    assert "不足" in response.text
+
+
 def test_download_rejects_invalid_run_id() -> None:
     # Non-token run ids (e.g. traversal attempts) must not resolve to a path.
     assert client.get("/runs/not-a-token/download/yaml").status_code == 404
