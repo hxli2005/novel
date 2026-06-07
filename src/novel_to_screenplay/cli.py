@@ -10,6 +10,7 @@ import typer
 from rich.console import Console
 
 from novel_to_screenplay import __version__
+from novel_to_screenplay.exporters import to_fountain
 from novel_to_screenplay.pipeline.chapter_parser import (
     ChapterParseError,
     parse_chapters_file,
@@ -82,6 +83,15 @@ class Pacing(StrEnum):
     balanced = "balanced"
     compressed = "compressed"
     fast = "fast"
+
+
+class ExportFormat(StrEnum):
+    """Readable export formats for the generated screenplay."""
+
+    fountain = "fountain"
+
+
+EXPORTERS = {ExportFormat.fountain: ("screenplay.fountain", to_fountain)}
 
 
 def _generation_options(
@@ -694,6 +704,46 @@ def check(
         apply_consistency_findings(document, findings)
         write_screenplay_yaml(document, screenplay_path)
         console.print(f"Wrote: {screenplay_path}")
+
+
+@app.command()
+def export(
+    workspace: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            readable=True,
+            help="Workspace directory containing output/screenplay.yaml.",
+        ),
+    ] = Path("runs/demo"),
+    export_format: Annotated[
+        ExportFormat,
+        typer.Option("--format", help="Readable export format."),
+    ] = ExportFormat.fountain,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", "-o", help="Output file path (defaults under the workspace)."),
+    ] = None,
+) -> None:
+    """Export the screenplay into a readable, tool-importable format."""
+
+    layout = build_workspace_layout(workspace)
+    screenplay_path = layout.output_dir / "screenplay.yaml"
+    if not screenplay_path.is_file():
+        console.print("No screenplay file found. Run novel2script run or generate first.")
+        raise typer.Exit(1)
+
+    document = load_yaml_document(screenplay_path)
+    if not isinstance(document, dict):
+        console.print("screenplay YAML must contain a top-level object.")
+        raise typer.Exit(1)
+
+    default_name, renderer = EXPORTERS[export_format]
+    output_path = out or layout.output_dir / default_name
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(renderer(document), encoding="utf-8")
+    console.print(f"Exported {export_format.value}: {output_path}")
 
 
 def main() -> None:
