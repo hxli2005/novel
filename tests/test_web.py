@@ -33,6 +33,18 @@ def test_run_sample_end_to_end_and_downloads() -> None:
         assert download.content, fmt
 
 
+def test_run_accepts_gbk_encoded_upload() -> None:
+    # Chinese novels are frequently GBK-encoded; this must not 500.
+    text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"
+    response = client.post(
+        "/runs",
+        data={"provider": "mock"},
+        files={"file": ("novel.txt", text.encode("gbk"), "text/plain")},
+    )
+    assert response.status_code == 200
+    assert "质量报告" in response.text
+
+
 def test_download_rejects_invalid_run_id() -> None:
     # Non-token run ids (e.g. traversal attempts) must not resolve to a path.
     assert client.get("/runs/not-a-token/download/yaml").status_code == 404

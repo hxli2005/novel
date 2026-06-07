@@ -1,6 +1,21 @@
 import pytest
 
-from novel_to_screenplay.pipeline.chapter_parser import ChapterParseError, parse_chapters
+from novel_to_screenplay.pipeline.chapter_parser import (
+    ChapterParseError,
+    parse_chapters,
+    parse_chapters_file,
+)
+
+
+def test_parse_chapters_file_reads_gbk_encoding(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    source = tmp_path / "novel.txt"
+    text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"
+    source.write_bytes(text.encode("gbk"))
+
+    chapters = parse_chapters_file(source)
+
+    assert len(chapters) == 3
+    assert chapters[0].title == "第一章 起"
 
 
 def test_parse_chapters_supports_markdown_chinese_headings() -> None:

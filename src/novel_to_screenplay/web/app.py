@@ -138,6 +138,8 @@ async def create_run(
         return _render_index_error(request, message)
     except ProviderError as exc:
         return _render_index_error(request, f"模型调用失败：{exc}。可改用离线 mock 重试。")
+    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
+        return _render_index_error(request, f"转换失败：{exc}")
 
     return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
