@@ -558,6 +558,41 @@ def test_check_with_llm_provider_adds_story_review(
     assert validate_result.exit_code == 0
 
 
+def test_export_command_writes_fountain(tmp_path: Path) -> None:
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。",
+                "第二章 药品库\n林青进入药品库。",
+                "第三章 天台\n赵岚走上天台。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+    runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+
+    result = runner.invoke(app, ["export", str(output_dir)])
+
+    assert result.exit_code == 0
+    fountain_path = output_dir / "output" / "screenplay.fountain"
+    assert fountain_path.is_file()
+    text = fountain_path.read_text(encoding="utf-8")
+    assert "Title:" in text
+    assert "@" in text  # at least one character cue
+
+
+def test_export_command_requires_screenplay_yaml(tmp_path: Path) -> None:
+    workspace = tmp_path / "run"
+    workspace.mkdir()
+
+    result = runner.invoke(app, ["export", str(workspace)])
+
+    assert result.exit_code != 0
+    assert "No screenplay file found. Run novel2script run or generate first." in result.stdout
+
+
 def test_check_command_requires_screenplay_yaml(tmp_path: Path) -> None:
     workspace = tmp_path / "run"
     workspace.mkdir()
