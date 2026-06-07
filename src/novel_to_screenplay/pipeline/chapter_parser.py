@@ -91,10 +91,31 @@ def parse_chapters(source_text: str) -> list[ParsedChapter]:
     return chapters
 
 
+SOURCE_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030")
+
+
+def read_source_text(source_path: Path) -> str:
+    """Read a novel file, tolerating common Chinese encodings.
+
+    Many Chinese novels are saved as GBK/GB2312 rather than UTF-8, so a strict
+    UTF-8 read raises UnicodeDecodeError. Try UTF-8 (with optional BOM) first,
+    then GB18030 (a superset of GBK/GB2312); fall back to a lossy UTF-8 read so
+    parsing never crashes on an unknown encoding.
+    """
+
+    raw = source_path.read_bytes()
+    for encoding in SOURCE_ENCODINGS:
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def parse_chapters_file(source_path: Path) -> list[ParsedChapter]:
     """Read and parse chapters from a text file."""
 
-    return parse_chapters(source_path.read_text(encoding="utf-8"))
+    return parse_chapters(read_source_text(source_path))
 
 
 def write_parsed_chapters_yaml(chapters: list[ParsedChapter], output_path: Path) -> None:
