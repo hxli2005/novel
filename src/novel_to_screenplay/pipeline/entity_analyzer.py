@@ -5,17 +5,20 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from novel_to_screenplay.pipeline.chapter_parser import ParsedChapter, quote_yaml_scalar
-from novel_to_screenplay.providers import ChatMessage, MockProvider
+from novel_to_screenplay.providers import ChatMessage, MockProvider, ProviderError
 from novel_to_screenplay.structured_output import complete_json
 
 MAX_EVENTS_PER_CHAPTER = 3
 MAX_ENTITY_NAME_LENGTH = 40
 CHUNK_CHAR_THRESHOLD = 4000
+# An entity rarely has more than a handful of surface forms; a larger cluster is
+# almost certainly an over-merge, so it is rejected rather than trusted.
+MAX_CLUSTER_MEMBERS = 6
 
 PERSON_STOPWORDS = {
     "主角",
@@ -77,6 +80,7 @@ class ExtractedEntity:
     id: str
     name: str
     source_chapters: list[str]
+    aliases: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -214,10 +218,25 @@ def analyze_chapters_with_llm(
             }
         )
 
-    # Merge aliases across the whole novel (e.g. 慕白 -> 李慕白) before assigning ids,
-    # since each chapter is analyzed in isolation and may use different name forms.
-    character_aliases = resolve_aliases(name for raw in raw_chapters for name in raw["characters"])
-    location_aliases = resolve_aliases(name for raw in raw_chapters for name in raw["locations"])
+    # Merge aliases across the whole novel before assigning ids, since each
+    # chapter is analyzed in isolation and may use different name forms. The
+    # provider clusters by referent (本名/别名/外号/小名/称谓); a suffix heuristic
+    # is the offline/parse-failure fallback.
+    story_context = " ".join(raw["summary"] for raw in raw_chapters if raw["summary"])[:600]
+    character_aliases = cluster_names_with_llm(
+        (name for raw in raw_chapters for name in raw["characters"]),
+        "characters",
+        provider,
+        context=story_context,
+        max_tokens=max_tokens,
+    )
+    location_aliases = cluster_names_with_llm(
+        (name for raw in raw_chapters for name in raw["locations"]),
+        "locations",
+        provider,
+        context=story_context,
+        max_tokens=max_tokens,
+    )
 
     chapter_analyses: list[ChapterAnalysis] = []
     character_sources: dict[str, set[str]] = {}
@@ -242,9 +261,124 @@ def analyze_chapters_with_llm(
 
     return EntityAnalysis(
         chapter_analyses=chapter_analyses,
-        characters=build_entities("char", character_sources),
-        locations=build_entities("loc", location_sources),
+        characters=build_entities("char", character_sources, alias_lists(character_aliases)),
+        locations=build_entities("loc", location_sources, alias_lists(location_aliases)),
     )
+
+
+def cluster_names_with_llm(
+    names: Iterable[str],
+    kind: str,
+    provider: Any,
+    *,
+    context: str = "",
+    max_tokens: int = 1024,
+) -> dict[str, str]:
+    """Cluster names referring to the same entity, returning name -> canonical.
+
+    The provider resolves coreference semantically (本名/别名/外号/小名/称谓), which
+    string matching cannot. On a parse failure the conservative suffix heuristic
+    (resolve_aliases) is used as a fallback.
+    """
+
+    candidates = sorted_unique([name for name in names if isinstance(name, str) and name.strip()])
+    if len(candidates) <= 1:
+        return {name: name for name in candidates}
+    try:
+        clusters = complete_json(
+            provider,
+            build_cluster_prompt(candidates, kind, context),
+            expect="array",
+            temperature=0.0,
+            max_tokens=max_tokens,
+        )
+    except ProviderError:
+        # Parse failure, or a transient provider error (HTTP 5xx, timeout, empty
+        # content) raised by provider.complete(): degrade to the offline heuristic
+        # rather than aborting the run after the expensive per-chapter analysis.
+        return resolve_aliases(candidates)
+    mapping = normalize_clusters(clusters, candidates)
+    # Guard against a degenerate response that collapses every entity into one;
+    # fall back to the conservative suffix heuristic instead of merging the cast.
+    if len(candidates) >= 3 and len(set(mapping.values())) == 1:
+        return resolve_aliases(candidates)
+    return mapping
+
+
+def build_cluster_prompt(candidates: list[str], kind: str, context: str) -> list[ChatMessage]:
+    """Build the provider prompt for entity-coreference clustering."""
+
+    label = "人物" if kind == "characters" else "地点"
+    payload = {
+        "kind": kind,
+        "story_context": context,
+        "names": candidates,
+        "output_contract": [
+            {"canonical": "最完整/正式的名字", "members": [f"指向同一{label}的所有写法"]}
+        ],
+    }
+    return [
+        ChatMessage(
+            role="system",
+            content=(
+                f"你是中文小说{label}同指消解助手。给你一份从同一本小说抽取的{label}名称清单，"
+                f"请把指向同一{label}的名称聚成一簇（包含本名、别名、外号、小名、称谓等不同写法）。"
+                "只在有把握时聚合；拿不准就让名称单独成簇——宁可不合并，也不要把两个不同对象合成一个。"
+                "每个名称恰好属于一个簇，canonical 从该簇成员里选最完整、最正式的名字。"
+                "只返回 JSON 数组，不要 Markdown，不要解释。"
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
+        ),
+    ]
+
+
+def normalize_clusters(clusters: Any, candidates: list[str]) -> dict[str, str]:
+    """Validate provider clusters into a name -> canonical mapping.
+
+    Invented names are ignored, a name claimed by two clusters stays with the
+    first, and any name the provider omits becomes its own canonical, so the
+    result is always a complete, safe mapping over the candidates.
+    """
+
+    candidate_set = set(candidates)
+    mapping: dict[str, str] = {}
+    assigned: set[str] = set()
+    if isinstance(clusters, list):
+        for cluster in clusters:
+            if not isinstance(cluster, dict):
+                continue
+            members = [
+                member
+                for member in cluster.get("members", [])
+                if isinstance(member, str) and member in candidate_set and member not in assigned
+            ]
+            if not members:
+                continue
+            if len(members) > MAX_CLUSTER_MEMBERS:
+                # Implausibly large cluster: leave its members as singletons.
+                continue
+            canonical = cluster.get("canonical")
+            if not (isinstance(canonical, str) and canonical in members):
+                canonical = max(members, key=len)
+            for member in members:
+                mapping[member] = canonical
+                assigned.add(member)
+    for candidate in candidates:
+        mapping.setdefault(candidate, candidate)
+    return mapping
+
+
+def alias_lists(name_to_canonical: dict[str, str]) -> dict[str, list[str]]:
+    """Invert a name->canonical mapping into canonical->[alias, ...]."""
+
+    result: dict[str, list[str]] = {}
+    for name, canonical in name_to_canonical.items():
+        if name != canonical:
+            result.setdefault(canonical, []).append(name)
+    return result
 
 
 def resolve_aliases(names: Iterable[str]) -> dict[str, str]:
@@ -513,9 +647,14 @@ def build_chapter_summary(chapter: ParsedChapter) -> str:
     return truncate_text(paragraphs[0], 80)
 
 
-def build_entities(prefix: str, entity_sources: dict[str, set[str]]) -> list[ExtractedEntity]:
+def build_entities(
+    prefix: str,
+    entity_sources: dict[str, set[str]],
+    aliases: dict[str, list[str]] | None = None,
+) -> list[ExtractedEntity]:
     """Build stable ordered entities from name to source chapter mapping."""
 
+    alias_lists = aliases or {}
     entities = []
     for index, name in enumerate(sorted(entity_sources), start=1):
         entities.append(
@@ -523,6 +662,7 @@ def build_entities(prefix: str, entity_sources: dict[str, set[str]]) -> list[Ext
                 id=f"{prefix}_{index:03d}",
                 name=name,
                 source_chapters=sorted(entity_sources[name]),
+                aliases=sorted(alias_lists.get(name, [])),
             )
         )
     return entities
@@ -614,9 +754,11 @@ def write_entity_registry_yaml(
             [
                 f"  - id: {quote_yaml_scalar(entity.id)}",
                 f"    name: {quote_yaml_scalar(entity.name)}",
-                "    source_chapters:",
+                "    aliases:",
             ]
         )
+        lines.extend(f"      - {quote_yaml_scalar(alias)}" for alias in entity.aliases)
+        lines.append("    source_chapters:")
         lines.extend(
             f"      - {quote_yaml_scalar(chapter_id)}" for chapter_id in entity.source_chapters
         )
