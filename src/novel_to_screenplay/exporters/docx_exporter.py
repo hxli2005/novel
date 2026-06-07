@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from docx import Document
+from docx import Document  # factory: Document() -> a new document
+from docx.document import Document as DocxDocument  # the class, for type hints
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 LOCATION_PREFIXES = {
@@ -61,7 +62,7 @@ def _scene_heading_text(scene: dict[str, Any]) -> str:
     return f"{location} - {time}" if time else location
 
 
-def _add_element(doc: Document, element: dict[str, Any]) -> None:
+def _add_element(doc: DocxDocument, element: dict[str, Any]) -> None:
     element_type = element.get("type")
     text = str(element.get("text", "")).strip()
     if not text:
