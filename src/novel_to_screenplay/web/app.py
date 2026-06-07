@@ -25,8 +25,13 @@ from fastapi.templating import Jinja2Templates
 
 from novel_to_screenplay.exporters import write_docx, write_fountain
 from novel_to_screenplay.pipeline.chapter_parser import ChapterParseError
-from novel_to_screenplay.pipeline.screenplay_generator import ScreenplayGenerationOptions
+from novel_to_screenplay.pipeline.consistency import apply_consistency_findings
+from novel_to_screenplay.pipeline.screenplay_generator import (
+    ScreenplayGenerationOptions,
+    write_screenplay_yaml,
+)
 from novel_to_screenplay.pipeline.screenplay_validator import load_yaml_document
+from novel_to_screenplay.pipeline.story_review import review_story_with_llm
 from novel_to_screenplay.providers import ProviderError, build_provider, get_provider_statuses
 from novel_to_screenplay.runner import run_pipeline
 from novel_to_screenplay.workspace import (
@@ -281,6 +286,32 @@ def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
         write_docx(document, path)
         return FileResponse(path, filename="screenplay.docx")
     return HTMLResponse("unknown format", status_code=404)
+
+
+@app.post("/runs/{run_id}/review", response_model=None)
+def review(request: Request, run_id: str) -> HTMLResponse | RedirectResponse:
+    """Run the LLM story-level review on a finished screenplay, on demand."""
+
+    output_dir = _run_output_dir(run_id)
+    if output_dir is None:
+        return _render_index_error(request, "找不到该剧本，请重新生成。")
+    yaml_path = output_dir / "screenplay.yaml"
+    document = load_yaml_document(yaml_path)
+    if not isinstance(document, dict):
+        return _render_index_error(request, "找不到该剧本，请重新生成。")
+
+    layout = build_workspace_layout(RUNS_DIR / run_id)
+    meta = _read_run_meta(layout)
+    try:
+        provider_obj = build_provider(meta.get("provider", "mock"))
+    except ProviderError as exc:
+        return _render_index_error(request, f"模型不可用：{exc}。可改用离线 mock。")
+
+    findings = review_story_with_llm(document, provider_obj)
+    if findings:
+        apply_consistency_findings(document, findings)
+        write_screenplay_yaml(document, yaml_path)
+    return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
 
 def _start_run(

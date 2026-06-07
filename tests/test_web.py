@@ -1,5 +1,9 @@
+import json
+
+import pytest
 from fastapi.testclient import TestClient
 
+from novel_to_screenplay.providers import ProviderCompletion
 from novel_to_screenplay.web.app import app
 
 client = TestClient(app)
@@ -76,6 +80,37 @@ def test_result_page_groups_quality_and_lists_locations() -> None:
     # with a Chinese gloss (not the raw code).
     assert "结构检查" in text
     assert "人物无台词" in text
+
+
+class _StoryReviewProvider:
+    name = "fake"
+    model = "fake"
+
+    def complete(self, messages, *, temperature=0.2, max_tokens=2048):  # type: ignore[no-untyped-def]
+        del messages, temperature, max_tokens
+        payload = [
+            {"code": "FORESHADOW_UNRESOLVED", "message": "铜钥匙未回收。", "scene_id": "sc_001"}
+        ]
+        return ProviderCompletion(
+            text=json.dumps(payload, ensure_ascii=False), provider="fake", model="fake", usage={}
+        )
+
+
+def test_review_button_disabled_for_mock_then_adds_story_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_id = _run(data={"use_sample": "1", "provider": "mock"})
+    # A mock run can't do the LLM review, so the button is disabled.
+    assert "需 DeepSeek 引擎" in client.get(f"/runs/{run_id}").text
+
+    # With an LLM provider, the review populates the 故事级复审 group.
+    monkeypatch.setattr(
+        "novel_to_screenplay.web.app.build_provider", lambda *a, **k: _StoryReviewProvider()
+    )
+    response = client.post(f"/runs/{run_id}/review")
+    assert response.status_code == 200  # followed redirect to the result page
+    assert "故事级复审" in response.text
+    assert "伏笔未回收" in response.text  # the Chinese gloss for FORESHADOW_UNRESOLVED
 
 
 def test_run_accepts_gbk_encoded_upload() -> None:
