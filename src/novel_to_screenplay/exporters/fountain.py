@@ -9,6 +9,7 @@ Fountain's forced markers (`@`, `>`) to stay unambiguous.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 LOCATION_PREFIXES = {
@@ -38,6 +39,13 @@ def to_fountain(document: dict[str, Any]) -> str:
         blocks.extend(_render_scene(scene))
 
     return "\n\n".join(block for block in blocks if block) + "\n"
+
+
+def write_fountain(document: dict[str, Any], output_path: Path) -> None:
+    """Write the screenplay document as a Fountain file at output_path."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(to_fountain(document), encoding="utf-8")
 
 
 def _title_page(document: dict[str, Any]) -> str:

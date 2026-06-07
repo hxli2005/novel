@@ -46,7 +46,14 @@ uv run novel2script run examples/novels/three_chapters.txt --out runs/demo --pro
 
 `run` 会直接产出**已扩写、已校验**的剧本初稿，写入 `runs/demo/output/screenplay.yaml`；上面分步命令用于需要逐阶段检查或人工介入的场景。
 
-`export` 把剧本 YAML 转成**人类可读、可被剧本软件导入**的格式。当前支持 [Fountain](https://fountain.io)（开放纯文本标准，Final Draft / WriterDuet / Highland / Scrivener 等均可导入），写入 `runs/demo/output/screenplay.fountain`。中文人物名用 Fountain 强制标记（`@角色名`、`> 转场`）以保证被正确识别。
+`export` 把剧本 YAML 转成**人类可读、可被剧本软件导入**的格式：
+
+- `--format fountain`：[Fountain](https://fountain.io) 开放纯文本标准（Final Draft / WriterDuet / Highland / Scrivener 等均可导入），写入 `output/screenplay.fountain`。中文人物名用强制标记（`@角色名`、`> 转场`）保证被正确识别。
+- `--format docx`：Word 文档（`output/screenplay.docx`），标准中文剧本排版（场景标题、`人物：对白`、转场右对齐），契合国内以 Word 为主的剧本流转习惯。
+
+```bash
+uv run novel2script export runs/demo --format docx
+```
 
 `run` 全程使用同一个 `--provider`：`mock` 时实体抽取与分场走离线规则（仅适用于内置示例），配置 DeepSeek 后使用 `--provider deepseek`，则**分析、分场、逐场扩写全部由模型驱动**，可泛化到任意题材小说：
 

@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 
 from novel_to_screenplay import __version__
-from novel_to_screenplay.exporters import to_fountain
+from novel_to_screenplay.exporters import write_docx, write_fountain
 from novel_to_screenplay.pipeline.chapter_parser import (
     ChapterParseError,
     parse_chapters_file,
@@ -89,9 +89,13 @@ class ExportFormat(StrEnum):
     """Readable export formats for the generated screenplay."""
 
     fountain = "fountain"
+    docx = "docx"
 
 
-EXPORTERS = {ExportFormat.fountain: ("screenplay.fountain", to_fountain)}
+EXPORTERS = {
+    ExportFormat.fountain: ("screenplay.fountain", write_fountain),
+    ExportFormat.docx: ("screenplay.docx", write_docx),
+}
 
 
 def _generation_options(
@@ -739,10 +743,9 @@ def export(
         console.print("screenplay YAML must contain a top-level object.")
         raise typer.Exit(1)
 
-    default_name, renderer = EXPORTERS[export_format]
+    default_name, writer = EXPORTERS[export_format]
     output_path = out or layout.output_dir / default_name
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(renderer(document), encoding="utf-8")
+    writer(document, output_path)
     console.print(f"Exported {export_format.value}: {output_path}")
 
 
