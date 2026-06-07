@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+{% set fmt_labels = {"screenplay": "电影剧本", "tv_episode": "电视剧集", "web_series_episode": "网络剧集", "microdrama_episode": "微短剧", "stage_play": "舞台剧"} %}
+{% set fid_labels = {"faithful": "忠于原著", "balanced": "平衡改编", "loose": "大胆重构"} %}
+{% set pace_labels = {"slow_burn": "娓娓道来", "balanced": "平稳", "compressed": "紧凑", "fast": "快节奏"} %}
+
+<section class="stage stage-upload">
+  <h1 class="stage-title">把小说，落定成剧本</h1>
+  <p class="stage-sub">上传 3 章以上的小说，AI 帮你生成可编辑、可导出的结构化剧本初稿。</p>
+
+  {% if error %}
+  <div class="banner banner-error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <form class="paper-card" action="/runs" method="post" enctype="multipart/form-data">
+    <label class="dropzone" id="dropzone">
+      <input type="file" name="file" accept=".txt,.md" id="file-input" />
+      <span class="dropzone-icon">＋</span>
+      <span class="dropzone-text" id="dropzone-text">把小说拖到这里，或点击选择（.txt / .md，至少 3 章）</span>
+    </label>
+
+    <div class="knobs">
+      <label class="field">
+        <span class="field-label">标题</span>
+        <input type="text" name="title" value="剧本初稿" />
+      </label>
+      <label class="field">
+        <span class="field-label">作者</span>
+        <input type="text" name="author" value="待填写" />
+      </label>
+      <label class="field">
+        <span class="field-label">体裁</span>
+        <select name="target_format">
+          {% for v in target_formats %}<option value="{{ v }}">{{ fmt_labels[v] }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">还原度</span>
+        <select name="fidelity">
+          {% for v in fidelities %}<option value="{{ v }}" {% if v == "balanced" %}selected{% endif %}>{{ fid_labels[v] }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">节奏</span>
+        <select name="pacing">
+          {% for v in pacings %}<option value="{{ v }}" {% if v == "compressed" %}selected{% endif %}>{{ pace_labels[v] }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">目标时长（分钟）</span>
+        <input type="number" name="runtime" value="8" min="1" />
+      </label>
+      <label class="field">
+        <span class="field-label">改编引擎</span>
+        <select name="provider">
+          {% for p in providers %}
+          <option value="{{ p.name }}" {% if p.name == "mock" %}selected{% endif %} {% if not p.configured %}disabled{% endif %}>
+            {% if p.name == "mock" %}离线演示（mock，秒出）{% else %}AI 深度改编（{{ p.name }}{% if not p.configured %}，未配置{% endif %}）{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn btn-primary" name="use_sample" value="">开始改编</button>
+      <button type="submit" class="btn btn-ghost" name="use_sample" value="1">用三章示例试一下</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  (function () {
+    var input = document.getElementById("file-input");
+    var zone = document.getElementById("dropzone");
+    var text = document.getElementById("dropzone-text");
+    if (!input || !zone) return;
+    input.addEventListener("change", function () {
+      if (input.files && input.files.length) {
+        text.textContent = input.files[0].name;
+        zone.classList.add("has-file");
+      }
+    });
+    ["dragenter", "dragover"].forEach(function (e) {
+      zone.addEventListener(e, function (ev) { ev.preventDefault(); zone.classList.add("dragging"); });
+    });
+    ["dragleave", "drop"].forEach(function (e) {
+      zone.addEventListener(e, function (ev) { ev.preventDefault(); zone.classList.remove("dragging"); });
+    });
+    zone.addEventListener("drop", function (ev) {
+      if (ev.dataTransfer && ev.dataTransfer.files.length) {
+        input.files = ev.dataTransfer.files;
+        text.textContent = input.files[0].name;
+        zone.classList.add("has-file");
+      }
+    });
+  })();
+</script>
+{% endblock %}

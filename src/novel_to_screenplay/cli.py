@@ -48,6 +48,7 @@ from novel_to_screenplay.providers import (
     build_provider,
     get_provider_statuses,
 )
+from novel_to_screenplay.runner import run_pipeline
 from novel_to_screenplay.workspace import (
     build_workspace_layout,
     find_staged_source_file,
@@ -245,29 +246,11 @@ def run(
     layout = initialize_workspace(out)
     staged_path = stage_source_file(input_path, layout)
     try:
-        chapters = parse_chapters_file(staged_path)
-    except ChapterParseError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-
-    parsed_chapters_path = layout.intermediates_dir / "parsed_chapters.yaml"
-    write_parsed_chapters_yaml(chapters, parsed_chapters_path)
-
-    scene_outline_path = layout.intermediates_dir / "scene_outline.yaml"
-    screenplay_path = layout.output_dir / "screenplay.yaml"
-    try:
         llm_provider = build_provider(provider)
-        analysis = analyze_chapters_auto(chapters, llm_provider)
-        write_entity_analysis_outputs(analysis, layout.intermediates_dir)
-        outline = build_scene_outline_auto(
-            analysis,
+        result = run_pipeline(
+            staged_path,
+            layout,
             llm_provider,
-            adaptation=_outline_adaptation(target_format, pacing),
-        )
-        write_scene_outline_yaml(outline, scene_outline_path)
-        screenplay = build_screenplay_document(
-            chapters,
-            analysis,
-            outline,
             _generation_options(
                 title=title,
                 author=author,
@@ -276,41 +259,37 @@ def run(
                 pacing=pacing,
                 runtime=runtime,
             ),
-        )
-        write_screenplay_yaml(screenplay, screenplay_path)
-        draft_result = draft_screenplay_scenes(
-            screenplay,
-            llm_provider,
+            outline_adaptation=_outline_adaptation(target_format, pacing),
             max_tokens=max_tokens,
+            schema=schema,
         )
+    except ChapterParseError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     except ProviderError as exc:
         console.print(str(exc))
         raise typer.Exit(1) from exc
-    write_screenplay_yaml(draft_result.document, screenplay_path)
 
     console.print(f"Initialized workspace: {layout.root}")
     console.print(f"Staged source: {staged_path}")
-    console.print(f"Parsed chapters: {len(chapters)}")
-    console.print(f"Analyzed chapters: {len(analysis.chapter_analyses)}")
-    console.print(f"Outlined scenes: {len(outline.scenes)}")
-    console.print(f"Generated screenplay: {screenplay_path}")
-    console.print(f"Extracted characters: {len(analysis.characters)}")
-    console.print(f"Extracted locations: {len(analysis.locations)}")
-    console.print(f"Drafted scenes: {len(draft_result.drafted_scene_ids)}")
-    console.print(f"Provider: {draft_result.provider}")
-    console.print(f"Model: {draft_result.model}")
+    console.print(f"Parsed chapters: {len(result.chapters)}")
+    console.print(f"Analyzed chapters: {len(result.analysis.chapter_analyses)}")
+    console.print(f"Outlined scenes: {len(result.outline.scenes)}")
+    console.print(f"Generated screenplay: {result.screenplay_path}")
+    console.print(f"Extracted characters: {len(result.analysis.characters)}")
+    console.print(f"Extracted locations: {len(result.analysis.locations)}")
+    console.print(f"Drafted scenes: {len(result.draft_result.drafted_scene_ids)}")
+    console.print(f"Provider: {result.draft_result.provider}")
+    console.print(f"Model: {result.draft_result.model}")
 
-    if not schema.is_file():
+    if result.validation is None:
         console.print(f"Validation skipped: schema file not found ({schema}).")
         return
-
-    validation = validate_screenplay_file(screenplay_path, schema)
-    if validation.passed:
-        console.print(f"Validation passed: {screenplay_path}")
+    if result.validation.passed:
+        console.print(f"Validation passed: {result.screenplay_path}")
         return
 
-    console.print(f"Validation failed: {len(validation.issues)} issue(s)")
-    for issue in validation.issues:
+    console.print(f"Validation failed: {len(result.validation.issues)} issue(s)")
+    for issue in result.validation.issues:
         console.print(f"- {issue.code} {issue.path}: {issue.message}")
     raise typer.Exit(1)
 
@@ -747,6 +726,20 @@ def export(
     output_path = out or layout.output_dir / default_name
     writer(document, output_path)
     console.print(f"Exported {export_format.value}: {output_path}")
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host", help="Bind host.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Bind port.")] = 8000,
+    reload: Annotated[bool, typer.Option("--reload", help="Auto-reload on code changes.")] = False,
+) -> None:
+    """Launch the web UI (upload a novel, run the pipeline, read and export)."""
+
+    import uvicorn
+
+    console.print(f"墨稿 Inkdraft web UI: http://{host}:{port}")
+    uvicorn.run("novel_to_screenplay.web.app:app", host=host, port=port, reload=reload)
 
 
 def main() -> None:

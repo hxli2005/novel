@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.metadata.title }} · 墨稿{% endblock %}
+{% block content %}
+{% set mode_labels = {"INT": "内", "EXT": "外", "INT_EXT": "内/外", "UNKNOWN": ""} %}
+{% set time_labels = {"DAY": "日", "NIGHT": "夜", "MORNING": "晨", "EVENING": "黄昏", "CONTINUOUS": "连续", "LATER": "稍后", "UNKNOWN": ""} %}
+{% set status_labels = {"pass": "校验通过", "warning": "待复核", "fail": "校验未过"} %}
+
+<section class="reading">
+  <div class="export-bar">
+    <div class="export-meta">
+      <span class="export-title">{{ doc.metadata.title }}</span>
+      <span class="export-author">{{ doc.metadata.author }}</span>
+    </div>
+    <div class="export-actions">
+      <a class="btn btn-ghost" href="/">＋ 新建</a>
+      <a class="btn btn-ghost" href="/runs/{{ run_id }}/download/yaml">YAML</a>
+      <a class="btn btn-ghost" href="/runs/{{ run_id }}/download/fountain">Fountain</a>
+      <a class="btn btn-primary" href="/runs/{{ run_id }}/download/docx">导出 Word</a>
+    </div>
+  </div>
+
+  <div class="reading-grid">
+    <article class="script-paper">
+      {% for scene in doc.scenes %}
+      <section class="scene" id="{{ scene.id }}">
+        <h2 class="scene-heading">
+          <span class="scene-no">{{ "%02d"|format(scene.order) }}</span>
+          {% set mode = mode_labels.get(scene.scene_heading.location_mode, "") %}
+          {% set tod = time_labels.get(scene.scene_heading.time_of_day, "") %}
+          {% if mode %}<span class="scene-mode">{{ mode }}</span>{% endif %}
+          <span class="scene-place">{{ scene.scene_heading.display }}</span>
+          {% if tod %}<span class="scene-time">{{ tod }}</span>{% endif %}
+        </h2>
+        {% for el in scene.script %}
+          {% if el.type == "dialogue" %}
+          <div class="line dialogue">
+            <span class="cue">{{ el.character_name }}</span>
+            {% if el.parenthetical %}<span class="paren">（{{ el.parenthetical }}）</span>{% endif %}
+            <p class="speech">{{ el.text }}</p>
+            {% if el.subtext %}<p class="subtext">潜台词：{{ el.subtext }}</p>{% endif %}
+          </div>
+          {% elif el.type == "voiceover" %}
+          <div class="line dialogue vo">
+            <span class="cue">{{ el.character_name }}（V.O.）</span>
+            <p class="speech">{{ el.text }}</p>
+          </div>
+          {% elif el.type == "transition" %}
+          <p class="line transition">{{ el.text }}</p>
+          {% else %}
+          <p class="line action {{ 'note' if el.type in ['note', 'parenthetical'] else '' }}">{{ el.text }}</p>
+          {% endif %}
+        {% endfor %}
+      </section>
+      {% endfor %}
+    </article>
+
+    <aside class="drawer">
+      <div class="drawer-block">
+        <h3 class="drawer-title">人物</h3>
+        {% for c in doc.characters %}
+        <div class="entity-card">
+          <span class="entity-name">{{ c.name }}</span>
+          {% if c.aliases %}<span class="entity-aliases">又称：{{ c.aliases|join("、") }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      {% set qr = doc.quality_report %}
+      <div class="drawer-block">
+        <h3 class="drawer-title">质量报告
+          <span class="status status-{{ qr.validation_status }}">{{ status_labels.get(qr.validation_status, qr.validation_status) }}</span>
+        </h3>
+        {% if qr.warnings %}
+        <ul class="warnings">
+          {% for w in qr.warnings %}
+          <li class="warning">
+            <span class="warning-code">{{ w.code }}</span>
+            <span class="warning-msg">{{ w.message }}</span>
+            {% if w.scene_id %}<a class="warning-jump" href="#{{ w.scene_id }}">{{ w.scene_id }}</a>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">暂无警告。</p>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</section>
+{% endblock %}

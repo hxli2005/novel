@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,8 +39,14 @@ def draft_screenplay_scenes(
     *,
     max_tokens: int = 2048,
     scene_limit: int | None = None,
+    on_scene: Callable[[int, int, str], None] | None = None,
 ) -> SceneDraftResult:
-    """Draft screenplay script blocks scene by scene."""
+    """Draft screenplay script blocks scene by scene.
+
+    ``on_scene(index, total, scene_id)`` is invoked after each scene is drafted
+    (1-based index), so callers such as the web UI can report per-scene progress
+    during the slowest pipeline stage.
+    """
 
     drafted_document = copy.deepcopy(document)
     scenes = drafted_document.get("scenes", [])
@@ -51,9 +58,9 @@ def draft_screenplay_scenes(
     provider_name = getattr(provider, "name", "unknown")
     model = getattr(provider, "model", provider_name)
 
-    for scene in scenes[:scene_limit]:
-        if not isinstance(scene, dict):
-            continue
+    selected = [scene for scene in scenes[:scene_limit] if isinstance(scene, dict)]
+    total = len(selected)
+    for index, scene in enumerate(selected, start=1):
         script = draft_scene_script(
             drafted_document,
             scene,
@@ -64,6 +71,8 @@ def draft_screenplay_scenes(
         scene["script"] = script
         scene["revision_status"] = "ai_drafted"
         drafted_scene_ids.append(str(scene.get("id", "")))
+        if on_scene is not None:
+            on_scene(index, total, str(scene.get("id", "")))
 
     add_drafting_warning(drafted_document, provider_name, model, drafted_scene_ids)
     return SceneDraftResult(
