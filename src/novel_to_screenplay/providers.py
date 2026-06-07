@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -15,6 +17,9 @@ SUPPORTED_PROVIDER_NAMES = ("mock", "deepseek")
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEFAULT_DEEPSEEK_THINKING = "disabled"
+DEFAULT_DEEPSEEK_MAX_RETRIES = 2
+# HTTP statuses worth retrying: rate limiting + transient server-side errors.
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
 Transport = Callable[[urllib.request.Request, float], bytes]
 
@@ -108,6 +113,8 @@ class DeepSeekProvider:
         base_url: str = DEFAULT_DEEPSEEK_BASE_URL,
         thinking: str = DEFAULT_DEEPSEEK_THINKING,
         timeout_sec: float = 60,
+        max_retries: int = DEFAULT_DEEPSEEK_MAX_RETRIES,
+        retry_backoff_sec: float = 0.5,
         transport: Transport | None = None,
     ) -> None:
         if not api_key:
@@ -119,6 +126,8 @@ class DeepSeekProvider:
         self.base_url = base_url.rstrip("/")
         self.thinking = normalize_thinking(thinking)
         self.timeout_sec = timeout_sec
+        self.max_retries = max(0, max_retries)
+        self.retry_backoff_sec = retry_backoff_sec
         self.transport = transport or default_transport
 
     @classmethod
@@ -161,14 +170,7 @@ class DeepSeekProvider:
             },
             method="POST",
         )
-        try:
-            response_body = self.transport(request, self.timeout_sec)
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise ProviderRequestError(f"DeepSeek API returned HTTP {exc.code}: {body}") from exc
-        except urllib.error.URLError as exc:
-            raise ProviderRequestError(f"DeepSeek API request failed: {exc.reason}") from exc
-
+        response_body = self._request_with_retry(request)
         response = parse_json_response(response_body)
         try:
             text = response["choices"][0]["message"]["content"]
@@ -187,6 +189,34 @@ class DeepSeekProvider:
             model=str(response.get("model", self.model)),
             usage=usage if isinstance(usage, dict) else {},
         )
+
+    def _request_with_retry(self, request: urllib.request.Request) -> bytes:
+        """Send the request, retrying transient failures, and return the body.
+
+        Every transport-level failure (connection drops, timeouts, 5xx/429) is
+        retried up to ``max_retries`` times, then surfaced as a ProviderError so
+        callers (alias clustering, the web worker, ...) can fall back or report
+        a clean message instead of crashing on a raw urllib/http.client error.
+        """
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self.transport(request, self.timeout_sec)
+            except urllib.error.HTTPError as exc:
+                if exc.code in RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+                    time.sleep(self.retry_backoff_sec * (attempt + 1))
+                    continue
+                body = exc.read().decode("utf-8", errors="replace")
+                raise ProviderRequestError(
+                    f"DeepSeek API returned HTTP {exc.code}: {body}"
+                ) from exc
+            except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_backoff_sec * (attempt + 1))
+                    continue
+                raise ProviderRequestError(f"DeepSeek API request failed: {exc}") from exc
+        # Defensive: the loop always returns or raises above.
+        raise ProviderRequestError("DeepSeek API request failed after retries.")
 
 
 def build_provider(
