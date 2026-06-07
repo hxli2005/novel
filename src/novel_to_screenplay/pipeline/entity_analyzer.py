@@ -14,6 +14,7 @@ from novel_to_screenplay.structured_output import complete_json
 
 MAX_EVENTS_PER_CHAPTER = 3
 MAX_ENTITY_NAME_LENGTH = 40
+CHUNK_CHAR_THRESHOLD = 4000
 
 PERSON_STOPWORDS = {
     "主角",
@@ -169,12 +170,15 @@ def analyze_chapters_with_llm(
     provider: Any,
     *,
     max_tokens: int = 1024,
+    max_chars: int = CHUNK_CHAR_THRESHOLD,
 ) -> EntityAnalysis:
     """Extract chapter analyses and entities using an LLM provider.
 
     Each chapter is analyzed independently so prompts stay small and the work
-    scales to longer novels. Results are aggregated into the same structures
-    the rule-based path produces, keeping downstream stages unchanged.
+    scales to longer novels; chapters longer than ``max_chars`` are split into
+    segments, analyzed segment by segment, and merged. Results are aggregated
+    into the same structures the rule-based path produces, keeping downstream
+    stages unchanged.
     """
 
     chapter_analyses: list[ChapterAnalysis] = []
@@ -183,7 +187,9 @@ def analyze_chapters_with_llm(
     event_counter = 1
 
     for chapter in chapters:
-        payload = extract_chapter_payload(provider, chapter, max_tokens=max_tokens)
+        payload = extract_chapter_payload(
+            provider, chapter, max_tokens=max_tokens, max_chars=max_chars
+        )
         characters = normalize_name_list(payload.get("characters"))
         locations = normalize_name_list(payload.get("locations"))
 
@@ -231,12 +237,32 @@ def extract_chapter_payload(
     chapter: ParsedChapter,
     *,
     max_tokens: int,
+    max_chars: int = CHUNK_CHAR_THRESHOLD,
 ) -> dict[str, Any]:
-    """Ask the provider to extract one chapter's analysis as a JSON object."""
+    """Extract one chapter's analysis, splitting long chapters into segments."""
+
+    segments = split_text_into_chunks(chapter.text, max_chars)
+    if len(segments) <= 1:
+        return extract_segment_payload(provider, chapter, chapter.text, max_tokens=max_tokens)
+    segment_payloads = [
+        extract_segment_payload(provider, chapter, segment, max_tokens=max_tokens)
+        for segment in segments
+    ]
+    return merge_segment_payloads(segment_payloads)
+
+
+def extract_segment_payload(
+    provider: Any,
+    chapter: ParsedChapter,
+    text: str,
+    *,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """Ask the provider to extract one chapter segment as a JSON object."""
 
     payload = complete_json(
         provider,
-        build_chapter_analysis_prompt(chapter),
+        build_chapter_analysis_prompt(chapter, text),
         expect="object",
         temperature=0.1,
         max_tokens=max_tokens,
@@ -244,14 +270,83 @@ def extract_chapter_payload(
     return payload if isinstance(payload, dict) else {}
 
 
-def build_chapter_analysis_prompt(chapter: ParsedChapter) -> list[ChatMessage]:
-    """Build the provider prompt for analyzing one chapter."""
+def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
+    """Split text into <= max_chars chunks on paragraph boundaries."""
+
+    units: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        if len(paragraph) <= max_chars:
+            units.append(paragraph)
+        else:
+            units.extend(
+                paragraph[index : index + max_chars]
+                for index in range(0, len(paragraph), max_chars)
+            )
+
+    chunks: list[str] = []
+    current = ""
+    for unit in units:
+        if not current:
+            current = unit
+        elif len(current) + 1 + len(unit) <= max_chars:
+            current = f"{current}\n{unit}"
+        else:
+            chunks.append(current)
+            current = unit
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def merge_segment_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge per-segment analysis payloads into one chapter payload.
+
+    Lists are concatenated (downstream normalization dedups and caps them) and
+    segment summaries are joined so the chapter summary spans the whole text.
+    """
+
+    summaries: list[str] = []
+    characters: list[Any] = []
+    locations: list[Any] = []
+    events: list[Any] = []
+    setups: list[Any] = []
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+        summary = payload.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            summaries.append(summary.strip())
+        characters.extend(_as_list(payload.get("characters")))
+        locations.extend(_as_list(payload.get("locations")))
+        events.extend(_as_list(payload.get("events")))
+        setups.extend(_as_list(payload.get("possible_setups")))
+    return {
+        "summary": " ".join(summaries),
+        "characters": characters,
+        "locations": locations,
+        "events": events,
+        "possible_setups": setups,
+    }
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def build_chapter_analysis_prompt(
+    chapter: ParsedChapter,
+    text: str | None = None,
+) -> list[ChatMessage]:
+    """Build the provider prompt for analyzing one chapter (or a segment)."""
 
     payload = {
         "chapter": {
             "id": chapter.id,
             "title": chapter.title,
-            "text": chapter.text,
+            "text": chapter.text if text is None else text,
         },
         "output_contract": {
             "summary": "本章一句话剧情梗概",

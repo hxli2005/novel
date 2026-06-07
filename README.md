@@ -103,7 +103,7 @@ uv run novel2script draft-scenes runs/demo --provider deepseek --max-tokens 2048
 
 `DEEPSEEK_THINKING` 默认为 `disabled`，用于让连通性检查和后续剧本扩写直接返回 `content`。如需开启 DeepSeek thinking mode，可设为 `enabled`，但需要为推理内容预留更高 `max_tokens`。
 
-`analyze` 默认使用 `mock`（离线规则）抽取人物、地点与伏笔；这套规则只对内置示例小说有效。配置 DeepSeek 后使用 `--provider deepseek`，则逐章调用模型抽取要素，可泛化到任意题材的小说。
+`analyze` 默认使用 `mock`（离线规则）抽取人物、地点与伏笔；这套规则只对内置示例小说有效。配置 DeepSeek 后使用 `--provider deepseek`，则逐章调用模型抽取要素，可泛化到任意题材的小说。超长章节会自动按段分块、逐段抽取再合并（人物/地点去重），以支撑长篇小说而不超出上下文。
 
 `outline` 同样支持 `--provider deepseek`：模型基于章节分析规划场景顺序（一章可拆多场或多章合并），并对返回的章节、人物、地点、事件 id 做引用校验，保证下游 id 一致；`mock` 仍走规则型一章一场。
 

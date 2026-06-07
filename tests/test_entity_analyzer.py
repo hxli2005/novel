@@ -6,6 +6,8 @@ from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters,
     analyze_chapters_auto,
     analyze_chapters_with_llm,
+    merge_segment_payloads,
+    split_text_into_chunks,
 )
 from novel_to_screenplay.providers import ChatMessage, MockProvider, ProviderCompletion
 
@@ -115,3 +117,48 @@ def test_analyze_chapters_auto_uses_rules_for_mock_provider() -> None:
     analysis = analyze_chapters_auto(chapters, MockProvider())
 
     assert "林青" in {character.name for character in analysis.characters}
+
+
+def test_split_text_into_chunks_packs_paragraphs_within_limit() -> None:
+    text = "\n\n".join(["甲" * 30, "乙" * 30, "丙" * 30])
+
+    chunks = split_text_into_chunks(text, 50)
+
+    assert len(chunks) >= 2
+    assert all(len(chunk) <= 50 for chunk in chunks)
+    # Short text stays a single chunk.
+    assert split_text_into_chunks("一段短文。", 50) == ["一段短文。"]
+
+
+def test_merge_segment_payloads_concatenates_lists_and_joins_summaries() -> None:
+    merged = merge_segment_payloads(
+        [
+            {"summary": "前半", "characters": ["甲"], "locations": ["房间"], "events": ["e1"]},
+            {"summary": "后半", "characters": ["乙"], "locations": [], "events": ["e2"]},
+        ]
+    )
+
+    assert merged["summary"] == "前半 后半"
+    assert merged["characters"] == ["甲", "乙"]
+    assert merged["events"] == ["e1", "e2"]
+
+
+def test_analyze_chapters_with_llm_chunks_long_chapters() -> None:
+    chapters = parse_chapters_file(FIXTURE)
+    provider = FakeAnalysisProvider(
+        [
+            {
+                "summary": "段落梗概。",
+                "characters": ["甲"],
+                "locations": ["房间"],
+                "events": ["事件"],
+                "possible_setups": [],
+            }
+        ]
+    )
+
+    analysis = analyze_chapters_with_llm(chapters, provider, max_chars=40)
+
+    # A small max_chars forces each chapter into several segment calls.
+    assert provider.calls > len(chapters)
+    assert {character.name for character in analysis.characters} == {"甲"}
