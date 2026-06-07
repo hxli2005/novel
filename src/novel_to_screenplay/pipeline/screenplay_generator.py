@@ -171,7 +171,7 @@ def build_characters(
         {
             "id": character.id,
             "name": character.name,
-            "aliases": [],
+            "aliases": list(character.aliases),
             "role": "protagonist" if character.id == protagonist_id else "unknown",
             "age": None,
             "description": f"{character.name}，由小说文本初步抽取的人物。",
@@ -208,6 +208,7 @@ def build_locations(
         {
             "id": location.id,
             "name": location.name,
+            "aliases": list(location.aliases),
             "type": map_location_type(mode_by_location_id.get(location.id, "UNKNOWN")),
             "visual_description": f"{location.name}，需作者补充更具体的视觉细节。",
             "recurring": len(location.source_chapters) > 1,
