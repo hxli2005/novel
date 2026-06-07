@@ -51,6 +51,14 @@
         <input type="number" name="runtime" value="8" min="1" />
       </label>
       <label class="field">
+        <span class="field-label">起始章（可选）</span>
+        <input type="number" name="chapter_start" value="1" min="1" />
+      </label>
+      <label class="field">
+        <span class="field-label">结束章（留空＝到末尾）</span>
+        <input type="number" name="chapter_end" min="1" placeholder="到末尾" />
+      </label>
+      <label class="field">
         <span class="field-label">改编引擎</span>
         <select name="provider">
           {% for p in providers %}

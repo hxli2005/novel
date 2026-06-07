@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from novel_to_screenplay.pipeline.chapter_parser import (
+    MIN_CHAPTER_COUNT,
+    ChapterParseError,
     ParsedChapter,
     parse_chapters_file,
     write_parsed_chapters_yaml,
@@ -53,6 +55,31 @@ class PipelineResult:
     screenplay_path: Path
     draft_result: SceneDraftResult
     validation: ValidationResult | None
+    total_chapters: int
+    chapter_start: int
+    chapter_end: int
+
+
+def select_chapters(
+    chapters: list[ParsedChapter],
+    chapter_start: int,
+    chapter_end: int | None,
+) -> list[ParsedChapter]:
+    """Return chapters in the 1-based inclusive [start, end] range.
+
+    Lets a user convert only part of a long novel. The selection must still hold
+    at least MIN_CHAPTER_COUNT chapters (the screenplay schema's minimum).
+    """
+
+    start = max(1, chapter_start)
+    selected = chapters[start - 1 : chapter_end]
+    if len(selected) < MIN_CHAPTER_COUNT:
+        message = (
+            f"所选章节范围不足 {MIN_CHAPTER_COUNT} 章"
+            f"（原著共解析 {len(chapters)} 章），请扩大范围。"
+        )
+        raise ChapterParseError(message)
+    return selected
 
 
 def run_pipeline(
@@ -65,8 +92,14 @@ def run_pipeline(
     max_tokens: int = 2048,
     schema: Path | None = None,
     on_event: EventCallback | None = None,
+    chapter_start: int = 1,
+    chapter_end: int | None = None,
 ) -> PipelineResult:
-    """Run the full conversion pipeline over an already-staged source file."""
+    """Run the full conversion pipeline over an already-staged source file.
+
+    ``chapter_start`` / ``chapter_end`` (1-based, inclusive) restrict the run to
+    part of a long novel; by default the whole novel is converted.
+    """
 
     def emit(stage: str, status: str, **fields: Any) -> None:
         if on_event is not None:
@@ -74,12 +107,13 @@ def run_pipeline(
 
     emit("parse", "start")
     try:
-        chapters = parse_chapters_file(staged_path)
+        all_chapters = parse_chapters_file(staged_path)
+        chapters = select_chapters(all_chapters, chapter_start, chapter_end)
     except Exception as exc:  # noqa: BLE001 - surface the failure, then re-raise
         emit("parse", "error", message=str(exc))
         raise
     write_parsed_chapters_yaml(chapters, layout.intermediates_dir / "parsed_chapters.yaml")
-    emit("parse", "done", count=len(chapters))
+    emit("parse", "done", count=len(chapters), total=len(all_chapters))
 
     emit("analyze", "start")
     analysis = analyze_chapters_auto(chapters, provider)
@@ -131,4 +165,7 @@ def run_pipeline(
         screenplay_path=screenplay_path,
         draft_result=draft_result,
         validation=validation,
+        total_chapters=len(all_chapters),
+        chapter_start=max(1, chapter_start),
+        chapter_end=chapter_end if chapter_end is not None else len(all_chapters),
     )

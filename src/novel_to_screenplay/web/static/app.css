@@ -124,6 +124,17 @@ body {
 .export-author { color: var(--ink-soft); font-size: 13px; }
 .export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+.selection-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 16px; margin-bottom: 18px; font-size: 14px; color: var(--ink-soft);
+}
+.selection-info { font-family: var(--serif); color: var(--ink); }
+.rerun-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rerun-label { color: var(--ink-soft); }
+.rerun-form input { width: 72px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); }
+.rerun-form .btn { padding: 7px 14px; font-size: 14px; }
+
 .reading-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
 
 .script-paper {

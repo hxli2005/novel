@@ -19,6 +19,20 @@
     </div>
   </div>
 
+  {% if meta and meta.total_chapters %}
+  <div class="selection-bar">
+    <span class="selection-info">原著共 {{ meta.total_chapters }} 章 · 本次转换第 {{ meta.chapter_start }}–{{ meta.chapter_end }} 章</span>
+    <form class="rerun-form" action="/runs/{{ run_id }}/rerun" method="post">
+      <span class="rerun-label">换个范围重生成：第</span>
+      <input type="number" name="chapter_start" value="{{ meta.chapter_start }}" min="1" />
+      <span>到</span>
+      <input type="number" name="chapter_end" value="{{ meta.chapter_end }}" min="1" />
+      <span>章</span>
+      <button type="submit" class="btn btn-ghost">重新生成</button>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="reading-grid">
     <article class="script-paper">
       {% for scene in doc.scenes %}
