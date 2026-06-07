@@ -7,6 +7,7 @@ from novel_to_screenplay.pipeline.entity_analyzer import (
     analyze_chapters_auto,
     analyze_chapters_with_llm,
     merge_segment_payloads,
+    resolve_aliases,
     split_text_into_chunks,
 )
 from novel_to_screenplay.providers import ChatMessage, MockProvider, ProviderCompletion
@@ -141,6 +142,52 @@ def test_merge_segment_payloads_concatenates_lists_and_joins_summaries() -> None
     assert merged["summary"] == "前半 后半"
     assert merged["characters"] == ["甲", "乙"]
     assert merged["events"] == ["e1", "e2"]
+
+
+def test_resolve_aliases_merges_chinese_short_forms() -> None:
+    mapping = resolve_aliases(["李慕白", "慕白", "柳含烟", "含烟", "老板", "赵无极"])
+    assert mapping["慕白"] == "李慕白"
+    assert mapping["含烟"] == "柳含烟"
+    assert mapping["老板"] == "老板"
+    assert mapping["李慕白"] == "李慕白"
+
+    # Location-style suffix (新公寓 contains 公寓).
+    assert resolve_aliases(["新公寓", "公寓"])["公寓"] == "新公寓"
+
+    # A shared-surname *prefix* must NOT merge two distinct names.
+    distinct = resolve_aliases(["张伟", "张伟杰"])
+    assert distinct["张伟"] == "张伟"
+    assert distinct["张伟杰"] == "张伟杰"
+
+    # A suffix shared by two full names is ambiguous -> kept as its own entity.
+    ambiguous = resolve_aliases(["李慕白", "张慕白", "慕白"])
+    assert ambiguous["慕白"] == "慕白"
+    assert ambiguous["李慕白"] == "李慕白"
+    assert ambiguous["张慕白"] == "张慕白"
+
+
+def test_analyze_chapters_with_llm_merges_aliases_across_chapters() -> None:
+    chapters = parse_chapters_file(FIXTURE)
+    provider = FakeAnalysisProvider(
+        [
+            {"summary": "一", "characters": ["慕白"], "locations": ["客栈"]},
+            {"summary": "二", "characters": ["李慕白"], "locations": ["悦来客栈"]},
+            {"summary": "三", "characters": ["柳含烟", "含烟"], "locations": []},
+        ]
+    )
+
+    analysis = analyze_chapters_with_llm(chapters, provider)
+
+    assert {character.name for character in analysis.characters} == {"李慕白", "柳含烟"}
+    mubai = next(character for character in analysis.characters if character.name == "李慕白")
+    assert mubai.source_chapters == ["ch_001", "ch_002"]
+    # The canonical name also replaces the short form in the per-chapter list.
+    assert analysis.chapter_analyses[0].characters == ["李慕白"]
+    # Location aliases merge too (客栈 -> 悦来客栈), with the same propagation:
+    assert {location.name for location in analysis.locations} == {"悦来客栈"}
+    assert analysis.chapter_analyses[0].locations == ["悦来客栈"]
+    inn = next(location for location in analysis.locations if location.name == "悦来客栈")
+    assert inn.source_chapters == ["ch_001", "ch_002"]
 
 
 def test_analyze_chapters_with_llm_chunks_long_chapters() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -181,27 +182,17 @@ def analyze_chapters_with_llm(
     stages unchanged.
     """
 
-    chapter_analyses: list[ChapterAnalysis] = []
-    character_sources: dict[str, set[str]] = {}
-    location_sources: dict[str, set[str]] = {}
+    raw_chapters: list[dict[str, Any]] = []
     event_counter = 1
-
     for chapter in chapters:
         payload = extract_chapter_payload(
             provider, chapter, max_tokens=max_tokens, max_chars=max_chars
         )
-        characters = normalize_name_list(payload.get("characters"))
-        locations = normalize_name_list(payload.get("locations"))
 
         events = []
         for event_summary in normalize_text_list(payload.get("events"))[:MAX_EVENTS_PER_CHAPTER]:
             events.append(ExtractedEvent(id=f"evt_raw_{event_counter:03d}", summary=event_summary))
             event_counter += 1
-
-        possible_setups = [
-            SetupCandidate(summary=setup)
-            for setup in normalize_text_list(payload.get("possible_setups"))
-        ]
 
         summary = payload.get("summary")
         if not isinstance(summary, str) or not summary.strip():
@@ -209,19 +200,43 @@ def analyze_chapters_with_llm(
         else:
             summary = truncate_text(" ".join(summary.split()), 90)
 
-        for character in characters:
-            character_sources.setdefault(character, set()).add(chapter.id)
-        for location in locations:
-            location_sources.setdefault(location, set()).add(chapter.id)
+        raw_chapters.append(
+            {
+                "chapter_id": chapter.id,
+                "summary": summary,
+                "characters": normalize_name_list(payload.get("characters")),
+                "locations": normalize_name_list(payload.get("locations")),
+                "events": events,
+                "possible_setups": [
+                    SetupCandidate(summary=setup)
+                    for setup in normalize_text_list(payload.get("possible_setups"))
+                ],
+            }
+        )
 
+    # Merge aliases across the whole novel (e.g. 慕白 -> 李慕白) before assigning ids,
+    # since each chapter is analyzed in isolation and may use different name forms.
+    character_aliases = resolve_aliases(name for raw in raw_chapters for name in raw["characters"])
+    location_aliases = resolve_aliases(name for raw in raw_chapters for name in raw["locations"])
+
+    chapter_analyses: list[ChapterAnalysis] = []
+    character_sources: dict[str, set[str]] = {}
+    location_sources: dict[str, set[str]] = {}
+    for raw in raw_chapters:
+        characters = sorted_unique([character_aliases[name] for name in raw["characters"]])
+        locations = sorted_unique([location_aliases[name] for name in raw["locations"]])
+        for character in characters:
+            character_sources.setdefault(character, set()).add(raw["chapter_id"])
+        for location in locations:
+            location_sources.setdefault(location, set()).add(raw["chapter_id"])
         chapter_analyses.append(
             ChapterAnalysis(
-                chapter_id=chapter.id,
-                summary=summary,
+                chapter_id=raw["chapter_id"],
+                summary=raw["summary"],
                 characters=characters,
                 locations=locations,
-                events=events,
-                possible_setups=possible_setups,
+                events=raw["events"],
+                possible_setups=raw["possible_setups"],
             )
         )
 
@@ -230,6 +245,38 @@ def analyze_chapters_with_llm(
         characters=build_entities("char", character_sources),
         locations=build_entities("loc", location_sources),
     )
+
+
+def resolve_aliases(names: Iterable[str]) -> dict[str, str]:
+    """Map each name to a canonical full name.
+
+    Chinese short forms drop the surname, so a short name is a *suffix* of its
+    full name (慕白 -> 李慕白, 公寓 -> 新公寓). A name (length >= 2) is folded into a
+    longer canonical name only when it is a suffix of *exactly one* canonical;
+    if several longer names share the suffix (李慕白 and 张慕白 both end with 慕白)
+    the short form is ambiguous and kept as its own entity rather than guessed.
+    Matching on suffix rather than arbitrary substring also avoids merging
+    distinct names that merely share a surname prefix (张伟 vs 张伟杰). Erring
+    toward under-merging keeps two real characters from collapsing into one.
+    """
+
+    canonicals: list[str] = []
+    mapping: dict[str, str] = {}
+    for name in sorted(set(names), key=lambda value: (-len(value), value)):
+        if len(name) >= 2:
+            matches = [
+                canonical
+                for canonical in canonicals
+                if canonical != name and canonical.endswith(name)
+            ]
+        else:
+            matches = []
+        if len(matches) == 1:
+            mapping[name] = matches[0]
+        else:
+            canonicals.append(name)
+            mapping[name] = name
+    return mapping
 
 
 def extract_chapter_payload(
