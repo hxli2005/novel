@@ -111,6 +111,14 @@
       </div>
 
       <div class="drawer-panel" data-panel="quality" hidden>
+        <form class="review-form" action="/runs/{{ run_id }}/review" method="post">
+          {% if meta.provider and meta.provider != "mock" %}
+          <button type="submit" class="btn btn-primary review-btn">运行 AI 深度复审</button>
+          <span class="review-hint">检查伏笔回收 · 人物弧光 · 跨场因果</span>
+          {% else %}
+          <button type="button" class="btn btn-ghost" disabled>AI 深度复审（需 DeepSeek 引擎）</button>
+          {% endif %}
+        </form>
         {% if not qr.warnings %}
         <p class="muted">暂无警告。</p>
         {% endif %}
@@ -169,6 +177,14 @@
         panels.forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== name; });
       });
     });
+
+    var reviewForm = document.querySelector(".review-form");
+    if (reviewForm) {
+      reviewForm.addEventListener("submit", function () {
+        var btn = reviewForm.querySelector(".review-btn");
+        if (btn) { btn.disabled = true; btn.textContent = "复审中…"; }
+      });
+    }
   })();
 </script>
 {% endblock %}
