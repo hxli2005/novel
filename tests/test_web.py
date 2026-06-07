@@ -65,6 +65,19 @@ def test_run_sample_end_to_end_and_downloads() -> None:
         assert download.content, fmt
 
 
+def test_result_page_groups_quality_and_lists_locations() -> None:
+    run_id = _run(data={"use_sample": "1", "provider": "mock"})
+    result = client.get(f"/runs/{run_id}")
+    text = result.text
+    # Drawer tabs + locations panel.
+    assert "人物 · 地点" in text
+    assert "地点" in text
+    # The pipeline ran the deterministic checks, shown under the structural group
+    # with a Chinese gloss (not the raw code).
+    assert "结构检查" in text
+    assert "人物无台词" in text
+
+
 def test_run_accepts_gbk_encoded_upload() -> None:
     # Chinese novels are frequently GBK-encoded; this must not return 500.
     text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"

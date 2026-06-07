@@ -257,7 +257,10 @@ def test_run_drafts_scenes_and_validates_end_to_end(tmp_path: Path) -> None:
     screenplay_path = output_dir / "output" / "screenplay.yaml"
     document = yaml.safe_load(screenplay_path.read_text(encoding="utf-8"))
     assert document["scenes"][0]["revision_status"] == "ai_drafted"
-    assert document["quality_report"]["warnings"][-1]["code"] == "AI_SCENE_DRAFTING"
+    codes = {warning["code"] for warning in document["quality_report"]["warnings"]}
+    assert "AI_SCENE_DRAFTING" in codes
+    # The pipeline now also runs the deterministic consistency checks.
+    assert codes & {"CHAPTER_NOT_ADAPTED", "CHARACTER_UNUSED", "CHARACTER_NO_DIALOGUE"}
 
 
 def test_run_routes_llm_provider_through_whole_pipeline(

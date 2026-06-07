@@ -20,6 +20,10 @@ from novel_to_screenplay.pipeline.chapter_parser import (
     parse_chapters_file,
     write_parsed_chapters_yaml,
 )
+from novel_to_screenplay.pipeline.consistency import (
+    analyze_consistency,
+    apply_consistency_findings,
+)
 from novel_to_screenplay.pipeline.entity_analyzer import (
     EntityAnalysis,
     analyze_chapters_auto,
@@ -147,6 +151,15 @@ def run_pipeline(
     )
     write_screenplay_yaml(draft_result.document, screenplay_path)
     emit("draft", "done", count=len(draft_result.drafted_scene_ids))
+
+    # Deterministic story-level checks (offline). LLM story review stays opt-in
+    # via the `check` command / a separate UI action.
+    emit("check", "start")
+    findings = analyze_consistency(draft_result.document)
+    if findings:
+        apply_consistency_findings(draft_result.document, findings)
+        write_screenplay_yaml(draft_result.document, screenplay_path)
+    emit("check", "done", findings=len(findings))
 
     validation: ValidationResult | None = None
     if schema is not None and schema.is_file():
