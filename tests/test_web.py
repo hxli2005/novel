@@ -5,6 +5,31 @@ from novel_to_screenplay.web.app import app
 client = TestClient(app)
 
 
+def _start_run(**post) -> str:  # type: ignore[no-untyped-def]
+    """POST /runs (follows the 303 to the running page); return the run_id."""
+    response = client.post("/runs", **post)
+    assert response.status_code == 200  # the running page
+    # final URL is /runs/{id}/running
+    return response.url.path.split("/")[2]
+
+
+def _await_run(run_id: str) -> None:
+    """Drain the SSE stream, which closes once the run reaches a terminal state."""
+    with client.stream("GET", f"/runs/{run_id}/events") as stream:
+        for _ in stream.iter_lines():
+            pass
+
+
+def _run(**post) -> str:  # type: ignore[no-untyped-def]
+    run_id = _start_run(**post)
+    _await_run(run_id)
+    return run_id
+
+
+def _multi_chapter_novel(count: int) -> bytes:
+    return "\n\n".join(f"第{i}章 标题{i}\n内容{i}。" for i in range(1, count + 1)).encode("utf-8")
+
+
 def test_healthz() -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
@@ -18,15 +43,22 @@ def test_index_renders_upload_page() -> None:
     assert "开始改编" in response.text
 
 
-def test_run_sample_end_to_end_and_downloads() -> None:
-    # Use the bundled sample with the offline mock provider.
-    response = client.post("/runs", data={"use_sample": "1", "provider": "mock"})
-    assert response.status_code == 200  # followed the 303 redirect to the result page
-    assert "质量报告" in response.text
-    # The result page renders a screenplay with extracted characters.
-    assert "林青" in response.text
+def test_running_page_renders_timeline() -> None:
+    run_id = _start_run(data={"use_sample": "1", "provider": "mock"})
+    page = client.get(f"/runs/{run_id}/running")
+    assert page.status_code == 200
+    assert "正在改编" in page.text
+    assert "逐场扩写" in page.text  # the draft stage node
+    _await_run(run_id)
 
-    run_id = response.url.path.rsplit("/", 1)[-1]
+
+def test_run_sample_end_to_end_and_downloads() -> None:
+    run_id = _run(data={"use_sample": "1", "provider": "mock"})
+    result = client.get(f"/runs/{run_id}")
+    assert result.status_code == 200
+    assert "质量报告" in result.text
+    assert "林青" in result.text  # extracted character
+
     for fmt in ["yaml", "fountain", "docx"]:
         download = client.get(f"/runs/{run_id}/download/{fmt}")
         assert download.status_code == 200, fmt
@@ -34,47 +66,50 @@ def test_run_sample_end_to_end_and_downloads() -> None:
 
 
 def test_run_accepts_gbk_encoded_upload() -> None:
-    # Chinese novels are frequently GBK-encoded; this must not 500.
+    # Chinese novels are frequently GBK-encoded; this must not return 500.
     text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"
-    response = client.post(
-        "/runs",
+    run_id = _run(
         data={"provider": "mock"},
         files={"file": ("novel.txt", text.encode("gbk"), "text/plain")},
     )
-    assert response.status_code == 200
-    assert "质量报告" in response.text
-
-
-def _multi_chapter_novel(count: int) -> bytes:
-    return "\n\n".join(f"第{i}章 标题{i}\n内容{i}。" for i in range(1, count + 1)).encode("utf-8")
+    result = client.get(f"/runs/{run_id}")
+    assert result.status_code == 200
+    assert "质量报告" in result.text
 
 
 def test_run_with_chapter_range_then_rerun() -> None:
     novel = _multi_chapter_novel(5)
-    response = client.post(
-        "/runs",
+    run_id = _run(
         data={"provider": "mock", "chapter_start": "2", "chapter_end": "4"},
         files={"file": ("novel.txt", novel, "text/plain")},
     )
-    assert response.status_code == 200
-    assert "原著共 5 章" in response.text
-    assert "本次转换第 2" in response.text
+    result = client.get(f"/runs/{run_id}")
+    assert "原著共 5 章" in result.text
+    assert "本次转换第 2" in result.text
 
-    run_id = response.url.path.rsplit("/", 1)[-1]
     # Re-run a different range from the already-staged source (no re-upload).
     rerun = client.post(f"/runs/{run_id}/rerun", data={"chapter_start": "1", "chapter_end": "5"})
-    assert rerun.status_code == 200
-    assert "本次转换第 1" in rerun.text
+    assert rerun.status_code == 200  # running page
+    _await_run(run_id)
+    assert "本次转换第 1" in client.get(f"/runs/{run_id}").text
 
 
-def test_run_rejects_too_small_chapter_range() -> None:
-    response = client.post(
-        "/runs",
+def test_too_small_chapter_range_surfaces_error() -> None:
+    run_id = _run(
         data={"provider": "mock", "chapter_start": "1", "chapter_end": "2"},
         files={"file": ("novel.txt", _multi_chapter_novel(5), "text/plain")},
     )
-    assert response.status_code == 400
-    assert "不足" in response.text
+    result = client.get(f"/runs/{run_id}")
+    assert result.status_code == 400
+    assert "不足" in result.text
+
+
+def test_events_for_unknown_run_emits_terminal_frame() -> None:
+    # An untracked run (restart/eviction/stale link) must not 404 into an
+    # infinite EventSource retry; it returns one terminal frame and closes.
+    with client.stream("GET", "/runs/aaaaaaaaaaaa/events") as stream:
+        frames = [line for line in stream.iter_lines() if line.startswith("data:")]
+    assert frames == ['data: {"stage": "complete", "status": "done"}']
 
 
 def test_download_rejects_invalid_run_id() -> None:
