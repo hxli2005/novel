@@ -50,6 +50,9 @@ body {
 .brand-text { font-family: var(--serif); font-size: 20px; font-weight: 600; }
 .brand-text small { font-family: var(--sans); font-size: 12px; color: var(--ink-soft); letter-spacing: 1px; }
 .tagline { color: var(--ink-soft); font-size: 14px; }
+.site-nav { display: inline-flex; align-items: center; gap: 18px; }
+.site-nav a { color: var(--ink-soft); font-size: 14px; text-decoration: none; transition: color 0.2s var(--ease); }
+.site-nav a:hover { color: var(--cinnabar); }
 .site-main { flex: 1; width: 100%; }
 .site-footer { padding: 20px 28px; color: var(--ink-soft); font-size: 13px; text-align: center; border-top: 1px solid var(--line); }
 
@@ -272,6 +275,26 @@ body {
 .warning-jump:hover { color: var(--cinnabar); }
 .muted { color: var(--ink-soft); font-size: 14px; }
 
+/* History */
+.history-list { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.history-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 20px; box-shadow: var(--shadow);
+  transition: border-color 0.2s var(--ease), transform 0.12s var(--ease);
+  animation: ink-rise 0.5s var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * 0.05s);
+}
+.history-card:hover { border-color: var(--cinnabar-soft); transform: translateY(-1px); }
+.history-main { display: flex; flex-direction: column; gap: 3px; text-decoration: none; color: var(--ink); flex: 1; min-width: 0; }
+.history-title { font-family: var(--serif); font-size: 18px; font-weight: 600; }
+.history-meta { font-size: 13px; color: var(--ink-soft); }
+.history-time { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.history-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.history-actions .btn { padding: 7px 14px; font-size: 14px; }
+.empty-state { text-align: center; color: var(--ink-soft); }
+.empty-state a { color: var(--cinnabar); text-decoration: none; margin-left: 8px; }
+
 /* Entrance motion — content settles in like ink on paper.
    `backwards` fill means the resting state is the visible end-state, so the
    global prefers-reduced-motion guard (animation:none) leaves nothing hidden. */
@@ -295,6 +318,7 @@ body {
   .stage { padding: 32px 16px; }
   .site-header { padding: 14px 16px; }
   .tagline { display: none; }
+  .history-card { flex-direction: column; align-items: stretch; }
 }
 
 /* CJK + a11y */
