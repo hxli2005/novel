@@ -126,6 +126,64 @@ def test_draft_screenplay_scenes_rejects_invalid_provider_output() -> None:
         draft_screenplay_scenes(document, InvalidJsonProvider(), scene_limit=1)
 
 
+class OneDialogueProvider:
+    name = "fake"
+    model = "fake-scene-model"
+
+    def __init__(self, character_id: str, character_name: str) -> None:
+        self.character_id = character_id
+        self.character_name = character_name
+
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> ProviderCompletion:
+        del messages, temperature, max_tokens
+        return ProviderCompletion(
+            text=json.dumps(
+                [
+                    {
+                        "type": "dialogue",
+                        "character_id": self.character_id,
+                        "character_name": self.character_name,
+                        "text": "我也在场。",
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            provider=self.name,
+            model=self.model,
+            usage={},
+        )
+
+
+def test_draft_accepts_known_character_not_prelisted_in_scene() -> None:
+    # The model legitimately voices a real character the outliner didn't list
+    # for this scene; this must not fail the run.
+    document = build_fixture_document()
+    document["characters"].append({"id": "char_guest", "name": "客串"})
+    provider = OneDialogueProvider("char_guest", "客串")
+
+    result = draft_screenplay_scenes(document, provider, scene_limit=1)
+
+    drafted = result.document["scenes"][0]
+    dialogue = [element for element in drafted["script"] if element["type"] == "dialogue"]
+    assert dialogue and dialogue[0]["character_id"] == "char_guest"
+    # The character is recorded as present so the scene stays consistent.
+    assert "char_guest" in drafted["characters_present"]
+
+
+def test_draft_rejects_dialogue_for_truly_unknown_character() -> None:
+    document = build_fixture_document()
+    provider = OneDialogueProvider("char_999", "幽灵")
+
+    with pytest.raises(SceneDraftError):
+        draft_screenplay_scenes(document, provider, scene_limit=1)
+
+
 def test_build_scene_prompt_includes_adaptation_strategy() -> None:
     document = {
         "adaptation": {

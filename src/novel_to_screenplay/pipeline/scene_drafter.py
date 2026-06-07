@@ -237,8 +237,16 @@ def normalize_dialogue(
     """Normalize a dialogue script element."""
 
     character_id = raw_element.get("character_id")
-    if not isinstance(character_id, str) or character_id not in allowed_character_ids:
-        raise SceneDraftError(f"dialogue references unknown scene character: {character_id}")
+    if not isinstance(character_id, str) or character_id not in characters_by_id:
+        raise SceneDraftError(f"dialogue references unknown character: {character_id}")
+    if character_id not in allowed_character_ids:
+        # The model voiced a real character the outliner didn't pre-list for
+        # this scene. Accept it and record the character as present so the
+        # scene stays internally consistent, rather than failing the run.
+        allowed_character_ids.add(character_id)
+        present = scene.setdefault("characters_present", [])
+        if character_id not in present:
+            present.append(character_id)
     character_name = raw_element.get("character_name") or characters_by_id[character_id].get("name")
     if not isinstance(character_name, str) or not character_name.strip():
         raise SceneDraftError(f"dialogue missing character_name for {character_id}")
