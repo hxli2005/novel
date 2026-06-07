@@ -6,6 +6,7 @@ Live per-stage progress (SSE) and richer interactions layer on in later steps.
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from pathlib import Path
@@ -47,6 +48,8 @@ TARGET_FORMATS = [
 FIDELITIES = ["faithful", "balanced", "loose"]
 PACINGS = ["slow_burn", "balanced", "compressed", "fast"]
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Inkdraft 墨稿")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -72,7 +75,7 @@ def index(request: Request) -> HTMLResponse:
     )
 
 
-def _render_index_error(request: Request, message: str) -> HTMLResponse:
+def _render_index_error(request: Request, message: str, status_code: int = 400) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -83,7 +86,7 @@ def _render_index_error(request: Request, message: str) -> HTMLResponse:
             "pacings": PACINGS,
             "error": message,
         },
-        status_code=400,
+        status_code=status_code,
     )
 
 
@@ -138,8 +141,9 @@ async def create_run(
         return _render_index_error(request, message)
     except ProviderError as exc:
         return _render_index_error(request, f"模型调用失败：{exc}。可改用离线 mock 重试。")
-    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
-        return _render_index_error(request, f"转换失败：{exc}")
+    except Exception:  # noqa: BLE001 - never surface a raw 500/traceback to the user
+        logger.exception("Pipeline run failed for run %s", run_id)
+        return _render_index_error(request, "转换失败，请稍后重试。", status_code=500)
 
     return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
