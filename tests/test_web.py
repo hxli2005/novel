@@ -49,6 +49,16 @@ def test_index_renders_upload_page() -> None:
     assert "开始改编" in response.text
 
 
+def test_favicon_link_and_asset_served() -> None:
+    # A brand favicon keeps the browser tab on-brand (and silences /favicon.ico
+    # 404s). The page must link it and the asset must be served.
+    page = client.get("/")
+    assert "/static/favicon.svg" in page.text
+    icon = client.get("/static/favicon.svg")
+    assert icon.status_code == 200
+    assert icon.content.startswith(b"<svg")
+
+
 def test_running_page_renders_timeline() -> None:
     run_id = _start_run(data={"use_sample": "1", "provider": "mock"})
     page = client.get(f"/runs/{run_id}/running")
