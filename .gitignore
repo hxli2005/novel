@@ -8,3 +8,7 @@ __pycache__/
 .env
 runs/
 *.egg-info/
+
+# Demo video build intermediates (the final mp4 + stills are committed)
+demo/_tmp/
+demo/_clips/

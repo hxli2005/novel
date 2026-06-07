@@ -33,6 +33,9 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# demo/ holds ad-hoc media-generation scripts (embedded HTML/CJK strings), not
+# shipped package code.
+extend-exclude = ["demo"]
 
 [tool.ruff.lint]
 select = [
