@@ -4,6 +4,17 @@
 {% set mode_labels = {"INT": "内", "EXT": "外", "INT_EXT": "内/外", "UNKNOWN": ""} %}
 {% set time_labels = {"DAY": "日", "NIGHT": "夜", "MORNING": "晨", "EVENING": "黄昏", "CONTINUOUS": "连续", "LATER": "稍后", "UNKNOWN": ""} %}
 {% set status_labels = {"pass": "校验通过", "warning": "待复核", "fail": "校验未过"} %}
+{% set struct_codes = ["CHAPTER_NOT_ADAPTED", "CHARACTER_UNUSED", "CHARACTER_NO_DIALOGUE"] %}
+{% set story_codes = ["FORESHADOW_UNRESOLVED", "ARC_INCONSISTENCY", "CAUSALITY_GAP"] %}
+{% set glosses = {
+  "CHAPTER_NOT_ADAPTED": "章节未改编", "CHARACTER_UNUSED": "人物未出场", "CHARACTER_NO_DIALOGUE": "人物无台词",
+  "FORESHADOW_UNRESOLVED": "伏笔未回收", "ARC_INCONSISTENCY": "人物弧光", "CAUSALITY_GAP": "跨场因果",
+  "RULE_BASED_DRAFT": "生成说明", "AI_SCENE_DRAFTING": "AI 扩写说明"
+} %}
+{% set qr = doc.quality_report %}
+{% set struct = qr.warnings | selectattr("code", "in", struct_codes) | list %}
+{% set story = qr.warnings | selectattr("code", "in", story_codes) | list %}
+{% set notes = qr.warnings | rejectattr("code", "in", struct_codes) | rejectattr("code", "in", story_codes) | list %}
 
 <section class="reading">
   <div class="export-bar">
@@ -69,36 +80,95 @@
     </article>
 
     <aside class="drawer">
-      <div class="drawer-block">
-        <h3 class="drawer-title">人物</h3>
-        {% for c in doc.characters %}
-        <div class="entity-card">
-          <span class="entity-name">{{ c.name }}</span>
-          {% if c.aliases %}<span class="entity-aliases">又称：{{ c.aliases|join("、") }}</span>{% endif %}
-        </div>
-        {% endfor %}
+      <div class="drawer-tabs">
+        <button type="button" class="drawer-tab active" data-tab="entities">人物 · 地点</button>
+        <button type="button" class="drawer-tab" data-tab="quality">
+          质量报告
+          <span class="status status-{{ qr.validation_status }}">{{ status_labels.get(qr.validation_status, qr.validation_status) }}</span>
+        </button>
       </div>
 
-      {% set qr = doc.quality_report %}
-      <div class="drawer-block">
-        <h3 class="drawer-title">质量报告
-          <span class="status status-{{ qr.validation_status }}">{{ status_labels.get(qr.validation_status, qr.validation_status) }}</span>
-        </h3>
-        {% if qr.warnings %}
-        <ul class="warnings">
-          {% for w in qr.warnings %}
-          <li class="warning">
-            <span class="warning-code">{{ w.code }}</span>
-            <span class="warning-msg">{{ w.message }}</span>
-            {% if w.scene_id %}<a class="warning-jump" href="#{{ w.scene_id }}">{{ w.scene_id }}</a>{% endif %}
-          </li>
+      <div class="drawer-panel" data-panel="entities">
+        <div class="drawer-block">
+          <h3 class="drawer-title">人物 <span class="count">{{ doc.characters|length }}</span></h3>
+          {% for c in doc.characters %}
+          <div class="entity-card">
+            <span class="entity-name">{{ c.name }}</span>
+            {% if c.role and c.role != "unknown" %}<span class="entity-role">{{ c.role }}</span>{% endif %}
+            {% if c.aliases %}<span class="chips">{% for a in c.aliases %}<span class="chip">又称 {{ a }}</span>{% endfor %}</span>{% endif %}
+          </div>
           {% endfor %}
-        </ul>
-        {% else %}
+        </div>
+        <div class="drawer-block">
+          <h3 class="drawer-title">地点 <span class="count">{{ doc.locations|length }}</span></h3>
+          {% for loc in doc.locations %}
+          <div class="entity-card">
+            <span class="entity-name">{{ loc.name }}</span>
+            {% if loc.aliases %}<span class="chips">{% for a in loc.aliases %}<span class="chip">又称 {{ a }}</span>{% endfor %}</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="drawer-panel" data-panel="quality" hidden>
+        {% if not qr.warnings %}
         <p class="muted">暂无警告。</p>
+        {% endif %}
+        {% if struct %}
+        <div class="drawer-block">
+          <h3 class="drawer-title">结构检查</h3>
+          <ul class="warnings">
+            {% for w in struct %}
+            <li class="warning">
+              <span class="warning-code">{{ glosses.get(w.code, w.code) }}</span>
+              <span class="warning-msg">{{ w.message }}</span>
+              {% if w.scene_id %}<a class="warning-jump" href="#{{ w.scene_id }}">跳转 {{ w.scene_id }}</a>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if story %}
+        <div class="drawer-block story">
+          <h3 class="drawer-title">故事级复审 <span class="ai-tag">AI</span></h3>
+          <ul class="warnings">
+            {% for w in story %}
+            <li class="warning">
+              <span class="warning-code story-code">{{ glosses.get(w.code, w.code) }}</span>
+              <span class="warning-msg">{{ w.message }}</span>
+              {% if w.scene_id %}<a class="warning-jump" href="#{{ w.scene_id }}">跳转 {{ w.scene_id }}</a>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if notes %}
+        <div class="drawer-block">
+          <h3 class="drawer-title">生成说明</h3>
+          <ul class="warnings">
+            {% for w in notes %}
+            <li class="warning"><span class="warning-msg">{{ w.message }}</span></li>
+            {% endfor %}
+          </ul>
+        </div>
         {% endif %}
       </div>
     </aside>
   </div>
 </section>
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll(".drawer-tab");
+    var panels = document.querySelectorAll(".drawer-panel");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        tabs.forEach(function (t) { t.classList.remove("active"); });
+        tab.classList.add("active");
+        var name = tab.getAttribute("data-tab");
+        panels.forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== name; });
+      });
+    });
+  })();
+</script>
 {% endblock %}
