@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from novel_to_screenplay.exporters import write_docx, write_fountain
+from novel_to_screenplay.exporters import write_docx, write_fdx, write_fountain
 from novel_to_screenplay.pipeline.chapter_parser import ChapterParseError
 from novel_to_screenplay.pipeline.consistency import apply_consistency_findings
 from novel_to_screenplay.pipeline.screenplay_generator import (
@@ -291,6 +291,10 @@ def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
         path = output_dir / "screenplay.docx"
         write_docx(document, path)
         return FileResponse(path, filename="screenplay.docx")
+    if fmt == "fdx":
+        path = output_dir / "screenplay.fdx"
+        write_fdx(document, path)
+        return FileResponse(path, filename="screenplay.fdx")
     return HTMLResponse("unknown format", status_code=404)
 
 

@@ -63,10 +63,18 @@ def test_run_sample_end_to_end_and_downloads() -> None:
     assert "质量报告" in result.text
     assert "林青" in result.text  # extracted character
 
-    for fmt in ["yaml", "fountain", "docx"]:
+    for fmt in ["yaml", "fountain", "docx", "fdx"]:
         download = client.get(f"/runs/{run_id}/download/{fmt}")
         assert download.status_code == 200, fmt
         assert download.content, fmt
+
+    # The Final Draft export must be downloadable and well-formed XML, and the
+    # result page must offer it.
+    import xml.etree.ElementTree as ET
+
+    fdx = client.get(f"/runs/{run_id}/download/fdx")
+    assert ET.fromstring(fdx.content).tag == "FinalDraft"
+    assert "/runs/" in result.text and "download/fdx" in result.text
 
 
 def test_result_page_groups_quality_and_lists_locations() -> None:
