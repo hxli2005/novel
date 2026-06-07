@@ -34,7 +34,9 @@
     </li>
   </ol>
 
-  <p class="running-foot"><a href="/">取消并返回</a></p>
+  <form class="running-foot" action="/runs/{{ run_id }}/cancel" method="post">
+    <button type="submit" class="link-btn">取消并返回</button>
+  </form>
 </section>
 
 <script>
@@ -81,6 +83,11 @@
       if (ev.stage === "complete") {
         es.close(); clearInterval(timer);
         window.location = "/runs/" + runId;
+        return;
+      }
+      if (ev.status === "cancelled") {
+        es.close(); clearInterval(timer);
+        window.location = "/";
         return;
       }
       if (ev.status === "error") {

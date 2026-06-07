@@ -71,13 +71,18 @@ _executor = ThreadPoolExecutor(max_workers=4)
 _runs_lock = threading.Lock()
 
 
+class RunCancelled(Exception):
+    """Raised inside the worker's event callback when a run is cancelled."""
+
+
 @dataclass
 class RunState:
     """In-memory progress for one run; events are streamed over SSE."""
 
-    status: str = "running"  # running | done | error
+    status: str = "running"  # running | done | error | cancelled
     error: str | None = None
     events: list[dict] = field(default_factory=list)
+    cancelled: bool = False
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -208,6 +213,23 @@ def rerun(
     return RedirectResponse(f"/runs/{run_id}/running", status_code=303)
 
 
+@app.post("/runs/{run_id}/cancel", response_model=None)
+def cancel_run(run_id: str) -> RedirectResponse:
+    """Flag an in-flight run for cancellation, then return to the upload page.
+
+    Cancellation is cooperative: the worker checks this flag in its event
+    callback and aborts at the next stage/scene boundary (so an in-progress
+    LLM call still finishes, but no further ones are made).
+    """
+
+    state = _runs.get(run_id)
+    if state is not None:
+        with state.lock:
+            if state.status == "running":
+                state.cancelled = True
+    return RedirectResponse("/", status_code=303)
+
+
 @app.get("/runs/{run_id}/running", response_class=HTMLResponse)
 def running(request: Request, run_id: str) -> HTMLResponse:
     return templates.TemplateResponse(request, "running.html", {"run_id": run_id})
@@ -237,7 +259,7 @@ async def events(run_id: str) -> Response:
                 status = state.status
             for event in pending:
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            if status in {"done", "error"}:
+            if status in {"done", "error", "cancelled"}:
                 break
             await asyncio.sleep(0.15)
 
@@ -344,6 +366,8 @@ def _run_worker(
     current = {"stage": "parse"}
 
     def on_event(event: dict) -> None:
+        if state.cancelled:
+            raise RunCancelled
         if event.get("status") == "start":
             current["stage"] = event.get("stage", current["stage"])
         with state.lock:
@@ -390,6 +414,10 @@ def _run_worker(
         with state.lock:
             state.events.append({"stage": "complete", "status": "done"})
             state.status = "done"
+    except RunCancelled:
+        with state.lock:
+            state.events.append({"stage": current["stage"], "status": "cancelled"})
+            state.status = "cancelled"
     except ChapterParseError as exc:
         if "章" in str(exc):
             message = str(exc)
