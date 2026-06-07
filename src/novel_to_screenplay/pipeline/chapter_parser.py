@@ -91,7 +91,9 @@ def parse_chapters(source_text: str) -> list[ParsedChapter]:
     return chapters
 
 
-SOURCE_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030")
+# utf-8-sig also decodes plain UTF-8 (it just strips a leading BOM if present),
+# so it covers the UTF-8 case; GB18030 is a superset of GBK/GB2312.
+SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
 
 
 def read_source_text(source_path: Path) -> str:

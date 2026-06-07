@@ -34,7 +34,7 @@ def test_run_sample_end_to_end_and_downloads() -> None:
 
 
 def test_run_accepts_gbk_encoded_upload() -> None:
-    # Chinese novels are frequently GBK-encoded; this must not 500.
+    # Chinese novels are frequently GBK-encoded; this must not return 500.
     text = "第一章 起\n中文内容。\n\n第二章 承\n更多内容。\n\n第三章 合\n结尾。\n"
     response = client.post(
         "/runs",
