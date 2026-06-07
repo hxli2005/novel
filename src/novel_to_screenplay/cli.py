@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 
 from novel_to_screenplay import __version__
-from novel_to_screenplay.exporters import write_docx, write_fountain
+from novel_to_screenplay.exporters import write_docx, write_fdx, write_fountain
 from novel_to_screenplay.pipeline.chapter_parser import (
     ChapterParseError,
     parse_chapters_file,
@@ -91,11 +91,13 @@ class ExportFormat(StrEnum):
 
     fountain = "fountain"
     docx = "docx"
+    fdx = "fdx"
 
 
 EXPORTERS = {
     ExportFormat.fountain: ("screenplay.fountain", write_fountain),
     ExportFormat.docx: ("screenplay.docx", write_docx),
+    ExportFormat.fdx: ("screenplay.fdx", write_fdx),
 }
 
 
