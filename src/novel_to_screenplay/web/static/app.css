@@ -123,12 +123,15 @@ body {
   padding: 0 0 26px 0;
 }
 .tl-node:last-child { padding-bottom: 0; }
-/* connector line between stamps */
+/* connector line between stamps — cinnabar "ink" draws downward as each stage lands */
 .tl-node:not(:last-child)::before {
   content: ""; position: absolute; left: 13px; top: 28px; bottom: -2px; width: 2px;
-  background: var(--line); transform-origin: top; transition: background 0.4s var(--ease);
+  background-color: var(--line);
+  background-image: linear-gradient(var(--cinnabar), var(--cinnabar));
+  background-repeat: no-repeat; background-size: 100% 0%;
+  transition: background-size 0.45s var(--ease);
 }
-.tl-node.done:not(:last-child)::before { background: var(--cinnabar); }
+.tl-node.done:not(:last-child)::before { background-size: 100% 100%; }
 .tl-stamp {
   flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
   border: 2px solid var(--line); background: var(--paper);
@@ -198,7 +201,11 @@ body {
   font-size: 17px;
   line-height: 1.9;
 }
-.scene { margin-bottom: 36px; }
+.scene {
+  margin-bottom: 36px;
+  animation: ink-rise 0.5s var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * 0.07s);
+}
 .scene-heading {
   font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 1px;
   color: var(--cinnabar); text-transform: none;
@@ -230,6 +237,10 @@ body {
 }
 .drawer-tab.active { color: var(--ink); border-bottom-color: var(--cinnabar); }
 .drawer-panel { display: flex; flex-direction: column; gap: 14px; }
+/* `display: flex` above would otherwise defeat the [hidden] attribute, leaving
+   both tab panels stacked; this restores real tab switching. */
+.drawer-panel[hidden] { display: none; }
+.drawer-panel:not([hidden]) { animation: fade-in 0.28s var(--ease); }
 .count { font-family: var(--sans); font-size: 12px; color: var(--ink-soft); font-weight: 400; }
 .entity-role { font-size: 12px; color: var(--cinnabar); margin-left: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -260,6 +271,18 @@ body {
 .warning-jump { font-size: 12px; color: var(--ink-soft); text-decoration: none; }
 .warning-jump:hover { color: var(--cinnabar); }
 .muted { color: var(--ink-soft); font-size: 14px; }
+
+/* Entrance motion — content settles in like ink on paper.
+   `backwards` fill means the resting state is the visible end-state, so the
+   global prefers-reduced-motion guard (animation:none) leaves nothing hidden. */
+@keyframes ink-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes fade-in { from { opacity: 0; } }
+.stage-upload .stage-title { animation: ink-rise 0.5s var(--ease) backwards; }
+.stage-upload .stage-sub { animation: ink-rise 0.5s var(--ease) 0.06s backwards; }
+.stage-upload .paper-card { animation: ink-rise 0.55s var(--ease) 0.12s backwards; }
+.banner { animation: ink-rise 0.4s var(--ease) backwards; }
+.reading .export-bar { animation: ink-rise 0.5s var(--ease) backwards; }
+.reading .drawer { animation: ink-rise 0.55s var(--ease) 0.1s backwards; }
 
 /* Responsive */
 @media (max-width: 900px) {

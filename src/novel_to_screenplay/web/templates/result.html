@@ -47,7 +47,7 @@
   <div class="reading-grid">
     <article class="script-paper">
       {% for scene in doc.scenes %}
-      <section class="scene" id="{{ scene.id }}">
+      <section class="scene" id="{{ scene.id }}" style="--i: {{ loop.index0 }}">
         <h2 class="scene-heading">
           <span class="scene-no">{{ "%02d"|format(scene.order) }}</span>
           {% set mode = mode_labels.get(scene.scene_heading.location_mode, "") %}
