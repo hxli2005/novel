@@ -159,6 +159,12 @@ def test_resolve_aliases_merges_chinese_short_forms() -> None:
     assert distinct["张伟"] == "张伟"
     assert distinct["张伟杰"] == "张伟杰"
 
+    # A suffix shared by two full names is ambiguous -> kept as its own entity.
+    ambiguous = resolve_aliases(["李慕白", "张慕白", "慕白"])
+    assert ambiguous["慕白"] == "慕白"
+    assert ambiguous["李慕白"] == "李慕白"
+    assert ambiguous["张慕白"] == "张慕白"
+
 
 def test_analyze_chapters_with_llm_merges_aliases_across_chapters() -> None:
     chapters = parse_chapters_file(FIXTURE)
@@ -177,8 +183,11 @@ def test_analyze_chapters_with_llm_merges_aliases_across_chapters() -> None:
     assert mubai.source_chapters == ["ch_001", "ch_002"]
     # The canonical name also replaces the short form in the per-chapter list.
     assert analysis.chapter_analyses[0].characters == ["李慕白"]
-    # Location aliases merge too (客栈 -> 悦来客栈).
+    # Location aliases merge too (客栈 -> 悦来客栈), with the same propagation:
     assert {location.name for location in analysis.locations} == {"悦来客栈"}
+    assert analysis.chapter_analyses[0].locations == ["悦来客栈"]
+    inn = next(location for location in analysis.locations if location.name == "悦来客栈")
+    assert inn.source_chapters == ["ch_001", "ch_002"]
 
 
 def test_analyze_chapters_with_llm_chunks_long_chapters() -> None:

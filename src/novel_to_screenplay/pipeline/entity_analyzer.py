@@ -251,28 +251,31 @@ def resolve_aliases(names: Iterable[str]) -> dict[str, str]:
     """Map each name to a canonical full name.
 
     Chinese short forms drop the surname, so a short name is a *suffix* of its
-    full name (慕白 -> 李慕白, 公寓 -> 新公寓). Each name (length >= 2) that is a
-    suffix of a longer accepted name is folded into that longer canonical name.
-    Matching on suffix rather than arbitrary substring avoids merging distinct
-    names that merely share a surname prefix (张伟 vs 张伟杰).
+    full name (慕白 -> 李慕白, 公寓 -> 新公寓). A name (length >= 2) is folded into a
+    longer canonical name only when it is a suffix of *exactly one* canonical;
+    if several longer names share the suffix (李慕白 and 张慕白 both end with 慕白)
+    the short form is ambiguous and kept as its own entity rather than guessed.
+    Matching on suffix rather than arbitrary substring also avoids merging
+    distinct names that merely share a surname prefix (张伟 vs 张伟杰). Erring
+    toward under-merging keeps two real characters from collapsing into one.
     """
 
     canonicals: list[str] = []
     mapping: dict[str, str] = {}
     for name in sorted(set(names), key=lambda value: (-len(value), value)):
-        target = next(
-            (
+        if len(name) >= 2:
+            matches = [
                 canonical
                 for canonical in canonicals
-                if len(name) >= 2 and canonical != name and canonical.endswith(name)
-            ),
-            None,
-        )
-        if target is None:
+                if canonical != name and canonical.endswith(name)
+            ]
+        else:
+            matches = []
+        if len(matches) == 1:
+            mapping[name] = matches[0]
+        else:
             canonicals.append(name)
             mapping[name] = name
-        else:
-            mapping[name] = target
     return mapping
 
 
