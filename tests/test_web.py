@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,6 +55,7 @@ def test_running_page_renders_timeline() -> None:
     assert page.status_code == 200
     assert "正在改编" in page.text
     assert "逐场扩写" in page.text  # the draft stage node
+    assert f"/runs/{run_id}/cancel" in page.text  # the cancel form posts here
     _await_run(run_id)
 
 
@@ -119,6 +122,34 @@ def test_review_button_disabled_for_mock_then_adds_story_findings(
     assert response.status_code == 200  # followed redirect to the result page
     assert "故事级复审" in response.text
     assert "伏笔未回收" in response.text  # the Chinese gloss for FORESHADOW_UNRESOLVED
+
+
+def test_cancel_aborts_in_flight_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    started = threading.Event()
+
+    def fake_run_pipeline(*args, on_event=None, **kwargs):  # type: ignore[no-untyped-def]
+        # Emit one event, then spin emitting more until the cancel flag makes
+        # on_event raise RunCancelled (cooperative cancellation).
+        on_event({"stage": "parse", "status": "start"})
+        started.set()
+        for _ in range(2000):
+            on_event({"stage": "draft", "status": "progress", "index": 1, "total": 1})
+            time.sleep(0.005)
+        raise AssertionError("run was not cancelled")  # pragma: no cover
+
+    monkeypatch.setattr("novel_to_screenplay.web.app.run_pipeline", fake_run_pipeline)
+
+    run_id = _start_run(data={"use_sample": "1", "provider": "mock"})
+    assert started.wait(timeout=5)  # the worker is alive and looping
+    assert client.post(f"/runs/{run_id}/cancel").status_code == 200  # 303 -> "/"
+
+    # The SSE stream must terminate with a cancelled frame (not hang or error).
+    frames = []
+    with client.stream("GET", f"/runs/{run_id}/events") as stream:
+        for line in stream.iter_lines():
+            if line.startswith("data:"):
+                frames.append(line)
+    assert any('"cancelled"' in f for f in frames)
 
 
 def test_history_lists_completed_runs_newest_first() -> None:
