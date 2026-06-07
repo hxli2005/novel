@@ -33,6 +33,12 @@ def test_run_sample_end_to_end_and_downloads() -> None:
         assert download.content, fmt
 
 
+def test_download_rejects_invalid_run_id() -> None:
+    # Non-token run ids (e.g. traversal attempts) must not resolve to a path.
+    assert client.get("/runs/not-a-token/download/yaml").status_code == 404
+    assert client.get("/runs/..%2f..%2fetc/download/yaml").status_code == 404
+
+
 def test_run_rejects_unsupported_file() -> None:
     response = client.post(
         "/runs",

@@ -6,6 +6,7 @@ Live per-stage progress (SSE) and richer interactions layer on in later steps.
 
 from __future__ import annotations
 
+import re
 import uuid
 from pathlib import Path
 
@@ -27,10 +28,14 @@ from novel_to_screenplay.workspace import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-RUNS_DIR = Path("runs/web")
-SCHEMA_PATH = Path("schemas/screenplay.schema.json")
-SAMPLE_NOVEL = Path("examples/novels/three_chapters.txt")
+# Anchor to the repo root (src/novel_to_screenplay/web/app.py -> parents[3]) so
+# `serve` works regardless of the launch directory.
+REPO_ROOT = BASE_DIR.parents[2]
+RUNS_DIR = REPO_ROOT / "runs" / "web"
+SCHEMA_PATH = REPO_ROOT / "schemas" / "screenplay.schema.json"
+SAMPLE_NOVEL = REPO_ROOT / "examples" / "novels" / "three_chapters.txt"
 SUPPORTED_SUFFIXES = {".txt", ".md"}
+RUN_ID_RE = re.compile(r"[0-9a-f]{12}")
 
 TARGET_FORMATS = [
     "screenplay",
@@ -151,7 +156,9 @@ def view_run(request: Request, run_id: str) -> HTMLResponse:
 
 @app.get("/runs/{run_id}/download/{fmt}", response_model=None)
 def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
-    output_dir = build_workspace_layout(RUNS_DIR / run_id).output_dir
+    output_dir = _run_output_dir(run_id)
+    if output_dir is None:
+        return HTMLResponse("not found", status_code=404)
     yaml_path = output_dir / "screenplay.yaml"
     if not yaml_path.is_file():
         return HTMLResponse("not found", status_code=404)
@@ -171,8 +178,23 @@ def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
     return HTMLResponse("unknown format", status_code=404)
 
 
+def _run_output_dir(run_id: str) -> Path | None:
+    """Resolve a run's output dir, rejecting any run_id that is not a run token.
+
+    Validating against the generated token shape (12 hex chars) prevents path
+    traversal (e.g. '..') from escaping the runs directory.
+    """
+
+    if not RUN_ID_RE.fullmatch(run_id):
+        return None
+    return build_workspace_layout(RUNS_DIR / run_id).output_dir
+
+
 def _load_run(run_id: str) -> dict | None:
-    yaml_path = build_workspace_layout(RUNS_DIR / run_id).output_dir / "screenplay.yaml"
+    output_dir = _run_output_dir(run_id)
+    if output_dir is None:
+        return None
+    yaml_path = output_dir / "screenplay.yaml"
     if not yaml_path.is_file():
         return None
     document = load_yaml_document(yaml_path)
