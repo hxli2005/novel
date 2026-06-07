@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}历史记录 · 墨稿{% endblock %}
+{% block content %}
+{% set provider_labels = {"mock": "离线演示", "deepseek": "DeepSeek"} %}
+<section class="stage history">
+  <h1 class="stage-title">历史记录</h1>
+  <p class="stage-sub">这里保存了你生成过的剧本，点开即可继续阅读或重新导出。</p>
+
+  {% if not runs %}
+  <div class="paper-card empty-state">
+    还没有生成过剧本。<a href="/">去生成第一个 →</a>
+  </div>
+  {% else %}
+  <ul class="history-list">
+    {% for r in runs %}
+    <li class="history-card" style="--i: {{ loop.index0 }}">
+      <a class="history-main" href="/runs/{{ r.run_id }}">
+        <span class="history-title">{{ r.title }}</span>
+        <span class="history-meta">
+          {% if r.author %}{{ r.author }} · {% endif %}{{ provider_labels.get(r.provider, r.provider) }}
+          {% if r.total_chapters %} · 第 {{ r.chapter_start }}–{{ r.chapter_end }} 章（原著 {{ r.total_chapters }} 章）{% endif %}
+        </span>
+        <span class="history-time">{{ r.generated_at }}</span>
+      </a>
+      <span class="history-actions">
+        <a class="btn btn-ghost" href="/runs/{{ r.run_id }}/download/yaml">YAML</a>
+        <a class="btn btn-ghost" href="/runs/{{ r.run_id }}/download/fdx">Final Draft</a>
+        <a class="btn btn-ghost" href="/runs/{{ r.run_id }}/download/docx">Word</a>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

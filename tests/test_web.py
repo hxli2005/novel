@@ -66,10 +66,18 @@ def test_run_sample_end_to_end_and_downloads() -> None:
     assert "质量报告" in result.text
     assert "林青" in result.text  # extracted character
 
-    for fmt in ["yaml", "fountain", "docx"]:
+    for fmt in ["yaml", "fountain", "docx", "fdx"]:
         download = client.get(f"/runs/{run_id}/download/{fmt}")
         assert download.status_code == 200, fmt
         assert download.content, fmt
+
+    # The Final Draft export must be downloadable and well-formed XML, and the
+    # result page must offer it.
+    import xml.etree.ElementTree as ET
+
+    fdx = client.get(f"/runs/{run_id}/download/fdx")
+    assert ET.fromstring(fdx.content).tag == "FinalDraft"
+    assert "/runs/" in result.text and "download/fdx" in result.text
 
 
 def test_result_page_groups_quality_and_lists_locations() -> None:
@@ -142,6 +150,22 @@ def test_cancel_aborts_in_flight_run(monkeypatch: pytest.MonkeyPatch) -> None:
             if line.startswith("data:"):
                 frames.append(line)
     assert any('"cancelled"' in f for f in frames)
+
+
+def test_history_lists_completed_runs_newest_first() -> None:
+    older = _run(data={"use_sample": "1", "provider": "mock", "title": "历史较早"})
+    newer = _run(data={"use_sample": "1", "provider": "mock", "title": "历史较新"})
+
+    page = client.get("/history")
+    assert page.status_code == 200
+    assert "历史较早" in page.text and "历史较新" in page.text
+    assert f"/runs/{older}" in page.text and f"/runs/{newer}" in page.text
+    # The most recently generated run is listed first.
+    assert page.text.index(f"/runs/{newer}") < page.text.index(f"/runs/{older}")
+
+
+def test_header_links_to_history() -> None:
+    assert 'href="/history"' in client.get("/").text
 
 
 def test_run_accepts_gbk_encoded_upload() -> None:

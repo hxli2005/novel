@@ -607,6 +607,34 @@ def test_export_command_writes_docx(tmp_path: Path) -> None:
     assert (output_dir / "output" / "screenplay.docx").is_file()
 
 
+def test_export_command_writes_fdx(tmp_path: Path) -> None:
+    import xml.etree.ElementTree as ET
+
+    source = tmp_path / "novel.txt"
+    source.write_text(
+        "\n\n".join(
+            [
+                "第一章 档案室\n林青在档案室发现线索。",
+                "第二章 药品库\n林青进入药品库。",
+                "第三章 天台\n赵岚走上天台。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run"
+    runner.invoke(app, ["run", str(source), "--out", str(output_dir)])
+
+    result = runner.invoke(app, ["export", str(output_dir), "--format", "fdx"])
+
+    assert result.exit_code == 0
+    fdx_path = output_dir / "output" / "screenplay.fdx"
+    assert fdx_path.is_file()
+    root = ET.parse(fdx_path).getroot()  # parses as valid XML
+    assert root.tag == "FinalDraft"
+    types = {p.get("Type") for p in root.find("Content").findall("Paragraph")}
+    assert "Scene Heading" in types
+
+
 def test_export_command_requires_screenplay_yaml(tmp_path: Path) -> None:
     workspace = tmp_path / "run"
     workspace.mkdir()
