@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}墨稿 · 小说转剧本{% endblock %}</title>
+  <!-- No external fonts: the stylesheet's serif/sans stacks fall back to the
+       system CJK fonts (Songti SC / SimSun, PingFang SC) so the app is fully
+       offline. Noto Serif/Sans SC are used automatically if installed locally. -->
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <span class="brand-mark">墨</span>
+      <span class="brand-text">墨稿 <small>Inkdraft</small></span>
+    </a>
+    <span class="tagline">把小说，落定成剧本</span>
+  </header>
+  <main class="site-main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <span>AI 辅助生成的剧本初稿，需作者复核与打磨。</span>
+  </footer>
+</body>
+</html>
