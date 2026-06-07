@@ -1,18 +1,25 @@
-"""FastAPI app: upload a novel, run the pipeline, read and export the screenplay.
+"""FastAPI app: upload a novel, run the pipeline (async), stream live progress.
 
-This is the synchronous vertical slice (upload -> run -> result + downloads).
-Live per-stage progress (SSE) and richer interactions layer on in later steps.
+Runs execute in a thread pool; each emits per-stage events into an in-memory
+RunState that the SSE endpoint streams to the browser. The browser watches the
+six-stage timeline and navigates to the result page on completion.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, File, Form, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -38,6 +45,7 @@ SCHEMA_PATH = REPO_ROOT / "schemas" / "screenplay.schema.json"
 SAMPLE_NOVEL = REPO_ROOT / "examples" / "novels" / "three_chapters.txt"
 SUPPORTED_SUFFIXES = {".txt", ".md"}
 RUN_ID_RE = re.compile(r"[0-9a-f]{12}")
+MAX_TRACKED_RUNS = 32
 
 TARGET_FORMATS = [
     "screenplay",
@@ -53,6 +61,23 @@ app = FastAPI(title="Inkdraft 墨稿")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+logger = logging.getLogger(__name__)
+_executor = ThreadPoolExecutor(max_workers=4)
+_runs_lock = threading.Lock()
+
+
+@dataclass
+class RunState:
+    """In-memory progress for one run; events are streamed over SSE."""
+
+    status: str = "running"  # running | done | error
+    error: str | None = None
+    events: list[dict] = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+_runs: dict[str, RunState] = {}
+
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
@@ -61,6 +86,10 @@ def healthz() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
+    return _render_index(request, error=None)
+
+
+def _render_index(request: Request, error: str | None, status_code: int = 200) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -69,24 +98,14 @@ def index(request: Request) -> HTMLResponse:
             "target_formats": TARGET_FORMATS,
             "fidelities": FIDELITIES,
             "pacings": PACINGS,
-            "error": None,
+            "error": error,
         },
+        status_code=status_code,
     )
 
 
 def _render_index_error(request: Request, message: str) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "providers": get_provider_statuses(),
-            "target_formats": TARGET_FORMATS,
-            "fidelities": FIDELITIES,
-            "pacings": PACINGS,
-            "error": message,
-        },
-        status_code=400,
-    )
+    return _render_index(request, error=message, status_code=400)
 
 
 @app.post("/runs", response_model=None)
@@ -119,22 +138,29 @@ async def create_run(
         return _render_index_error(request, "请上传一个 .txt / .md 小说文件，或使用内置示例。")
 
     staged_path = stage_source_file(source_path, layout)
-    error = _run_and_record(
+    try:
+        provider_obj = build_provider(provider)
+    except ProviderError as exc:
+        return _render_index_error(request, f"模型不可用：{exc}。可改用离线 mock。")
+
+    _start_run(
+        run_id,
         layout,
         staged_path,
-        title=title,
-        author=author,
-        target_format=target_format,
-        fidelity=fidelity,
-        pacing=pacing,
-        runtime=runtime,
-        provider=provider,
-        chapter_start=chapter_start,
-        chapter_end=_parse_optional_int(chapter_end),
+        provider_obj,
+        {
+            "title": title,
+            "author": author,
+            "target_format": target_format,
+            "fidelity": fidelity,
+            "pacing": pacing,
+            "runtime": runtime,
+            "provider": provider,
+            "chapter_start": chapter_start,
+            "chapter_end": _parse_optional_int(chapter_end),
+        },
     )
-    if error is not None:
-        return _render_index_error(request, error)
-    return RedirectResponse(f"/runs/{run_id}", status_code=303)
+    return RedirectResponse(f"/runs/{run_id}/running", status_code=303)
 
 
 @app.post("/runs/{run_id}/rerun", response_model=None)
@@ -152,28 +178,78 @@ def rerun(
     except FileNotFoundError:
         return _render_index_error(request, "原文已不可用，请重新上传生成。")
     meta = _read_run_meta(layout)
-    error = _run_and_record(
+    try:
+        provider_obj = build_provider(meta.get("provider", "mock"))
+    except ProviderError as exc:
+        return _render_index_error(request, f"模型不可用：{exc}。可改用离线 mock。")
+
+    _start_run(
+        run_id,
         layout,
         staged_path,
-        title=meta.get("title", "剧本初稿"),
-        author=meta.get("author", "待填写"),
-        target_format=meta.get("target_format", "screenplay"),
-        fidelity=meta.get("fidelity", "balanced"),
-        pacing=meta.get("pacing", "compressed"),
-        runtime=meta.get("runtime", 8),
-        provider=meta.get("provider", "mock"),
-        chapter_start=chapter_start,
-        chapter_end=_parse_optional_int(chapter_end),
+        provider_obj,
+        {
+            "title": meta.get("title", "剧本初稿"),
+            "author": meta.get("author", "待填写"),
+            "target_format": meta.get("target_format", "screenplay"),
+            "fidelity": meta.get("fidelity", "balanced"),
+            "pacing": meta.get("pacing", "compressed"),
+            "runtime": meta.get("runtime", 8),
+            "provider": meta.get("provider", "mock"),
+            "chapter_start": chapter_start,
+            "chapter_end": _parse_optional_int(chapter_end),
+        },
     )
-    if error is not None:
-        return _render_index_error(request, error)
-    return RedirectResponse(f"/runs/{run_id}", status_code=303)
+    return RedirectResponse(f"/runs/{run_id}/running", status_code=303)
 
 
-@app.get("/runs/{run_id}", response_class=HTMLResponse)
-def view_run(request: Request, run_id: str) -> HTMLResponse:
+@app.get("/runs/{run_id}/running", response_class=HTMLResponse)
+def running(request: Request, run_id: str) -> HTMLResponse:
+    return templates.TemplateResponse(request, "running.html", {"run_id": run_id})
+
+
+_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+@app.get("/runs/{run_id}/events")
+async def events(run_id: str) -> Response:
+    state = _runs.get(run_id)
+    if state is None:
+        # The run is no longer tracked (server restart / eviction / stale link).
+        # Emit one terminal frame so the client navigates to the result page
+        # instead of EventSource retrying the 404 forever.
+        async def gone() -> Any:
+            yield f"data: {json.dumps({'stage': 'complete', 'status': 'done'})}\n\n"
+
+        return StreamingResponse(gone(), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+    async def stream() -> Any:
+        sent = 0
+        while True:
+            with state.lock:
+                pending = state.events[sent:]
+                sent += len(pending)
+                status = state.status
+            for event in pending:
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if status in {"done", "error"}:
+                break
+            await asyncio.sleep(0.15)
+
+    return StreamingResponse(stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@app.get("/runs/{run_id}", response_model=None)
+def view_run(request: Request, run_id: str) -> HTMLResponse | RedirectResponse:
+    state = _runs.get(run_id)
+    # While a run (or rerun) is in flight, always show the running page rather
+    # than a possibly-stale earlier result still on disk.
+    if state is not None and state.status == "running":
+        return RedirectResponse(f"/runs/{run_id}/running", status_code=303)
     document = _load_run(run_id)
     if document is None:
+        if state is not None and state.status == "error" and state.error:
+            return _render_index_error(request, state.error)
         return _render_index_error(request, "找不到该剧本，请重新生成。")
     layout = build_workspace_layout(RUNS_DIR / run_id)
     return templates.TemplateResponse(
@@ -207,83 +283,123 @@ def download(run_id: str, fmt: str) -> FileResponse | HTMLResponse:
     return HTMLResponse("unknown format", status_code=404)
 
 
-def _parse_optional_int(value: str) -> int | None:
-    value = value.strip()
-    return int(value) if value.isdigit() else None
-
-
-def _run_and_record(
-    layout,  # noqa: ANN001 - WorkspaceLayout
+def _start_run(
+    run_id: str,
+    layout: Any,
     staged_path: Path,
-    *,
-    title: str,
-    author: str,
-    target_format: str,
-    fidelity: str,
-    pacing: str,
-    runtime: int,
-    provider: str,
-    chapter_start: int,
-    chapter_end: int | None,
-) -> str | None:
-    """Run the pipeline and record run metadata; return an error message or None."""
+    provider_obj: Any,
+    params: dict[str, Any],
+) -> None:
+    state = RunState()
+    with _runs_lock:
+        _runs[run_id] = state
+        # Evict only terminal runs beyond the cap; never drop an in-flight run
+        # (that would 404 its live SSE clients).
+        evictable = [rid for rid, st in _runs.items() if st.status != "running"]
+        while len(_runs) > MAX_TRACKED_RUNS and evictable:
+            _runs.pop(evictable.pop(0), None)
+    # Pass the RunState directly so the worker never re-looks-it-up (avoids a
+    # KeyError if this run is evicted before the worker starts).
+    _executor.submit(_run_worker, state, layout, staged_path, provider_obj, params)
 
-    options = ScreenplayGenerationOptions(
-        title=title or "剧本初稿",
-        author=author or "待填写",
-        target_format=target_format,
-        fidelity=fidelity,
-        pacing=pacing,
-        target_runtime_min=int(runtime),
-    )
+
+def _run_worker(
+    state: RunState,
+    layout: Any,
+    staged_path: Path,
+    provider_obj: Any,
+    params: dict[str, Any],
+) -> None:
+    current = {"stage": "parse"}
+
+    def on_event(event: dict) -> None:
+        if event.get("status") == "start":
+            current["stage"] = event.get("stage", current["stage"])
+        with state.lock:
+            state.events.append(event)
+
     try:
-        provider_obj = build_provider(provider)
+        options = ScreenplayGenerationOptions(
+            title=params["title"] or "剧本初稿",
+            author=params["author"] or "待填写",
+            target_format=params["target_format"],
+            fidelity=params["fidelity"],
+            pacing=params["pacing"],
+            target_runtime_min=int(params["runtime"]),
+        )
         result = run_pipeline(
             staged_path,
             layout,
             provider_obj,
             options,
-            outline_adaptation={"target_format": target_format, "pacing": pacing},
+            outline_adaptation={
+                "target_format": params["target_format"],
+                "pacing": params["pacing"],
+            },
             schema=SCHEMA_PATH,
-            chapter_start=chapter_start,
-            chapter_end=chapter_end,
+            on_event=on_event,
+            chapter_start=params["chapter_start"],
+            chapter_end=params["chapter_end"],
         )
+        _write_run_meta(
+            layout,
+            {
+                "total_chapters": result.total_chapters,
+                "chapter_start": result.chapter_start,
+                "chapter_end": result.chapter_end,
+                "title": params["title"],
+                "author": params["author"],
+                "target_format": params["target_format"],
+                "fidelity": params["fidelity"],
+                "pacing": params["pacing"],
+                "runtime": int(params["runtime"]),
+                "provider": params["provider"],
+            },
+        )
+        with state.lock:
+            state.events.append({"stage": "complete", "status": "done"})
+            state.status = "done"
     except ChapterParseError as exc:
-        # select_chapters raises a descriptive Chinese message; the parser's
-        # whole-novel message is terser, so fall back to a friendly hint.
         if "章" in str(exc):
-            return str(exc)
-        return "未能识别到至少 3 个章节，请检查章节标记（如“第一章”）。"
+            message = str(exc)
+        else:
+            message = "未能识别到至少 3 个章节，请检查章节标记（如“第一章”）。"
+        _fail_run(state, "parse", message)
     except ProviderError as exc:
-        return f"模型调用失败：{exc}。可改用离线 mock 重试。"
-    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 to the user
-        return f"转换失败：{exc}"
-
-    _write_run_meta(
-        layout,
-        {
-            "total_chapters": result.total_chapters,
-            "chapter_start": result.chapter_start,
-            "chapter_end": result.chapter_end,
-            "title": title,
-            "author": author,
-            "target_format": target_format,
-            "fidelity": fidelity,
-            "pacing": pacing,
-            "runtime": int(runtime),
-            "provider": provider,
-        },
-    )
-    return None
+        _fail_run(state, current["stage"], f"模型调用失败：{exc}。可改用离线 mock 重试。")
+    except Exception:  # noqa: BLE001 - log server-side; never leak a raw error to the user
+        logger.exception("Pipeline run failed")
+        _fail_run(state, current["stage"], "转换失败，请稍后重试。")
+    finally:
+        # Safety net: guarantee a terminal status so SSE clients never hang,
+        # even if an error escaped the handlers above.
+        with state.lock:
+            if state.status == "running":
+                state.events.append(
+                    {"stage": current["stage"], "status": "error", "message": "转换失败，请重试。"}
+                )
+                state.status = "error"
 
 
-def _write_run_meta(layout, meta: dict) -> None:  # noqa: ANN001 - WorkspaceLayout
+def _fail_run(state: RunState, stage: str, message: str) -> None:
+    with state.lock:
+        state.error = message
+        state.events.append({"stage": stage, "status": "error", "message": message})
+        state.status = "error"
+
+
+def _parse_optional_int(value: str) -> int | None:
+    value = value.strip()
+    return int(value) if value.isdigit() else None
+
+
+def _write_run_meta(layout: Any, meta: dict) -> None:
     (layout.root / "run.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
-def _read_run_meta(layout) -> dict:  # noqa: ANN001 - WorkspaceLayout
+def _read_run_meta(layout: Any) -> dict:
     path = layout.root / "run.json"
     if not path.is_file():
         return {}

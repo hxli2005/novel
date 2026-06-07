@@ -111,6 +111,54 @@ body {
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn-ghost:hover { background: var(--paper); }
 
+/* Running stage — stamp timeline */
+.running .stage-sub { font-variant-numeric: tabular-nums; }
+.running-foot { margin-top: 28px; }
+.running-foot a { color: var(--ink-soft); font-size: 14px; }
+.timeline { list-style: none; margin: 28px 0 0; padding: 0; }
+.tl-node {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 0 0 26px 0;
+}
+.tl-node:last-child { padding-bottom: 0; }
+/* connector line between stamps */
+.tl-node:not(:last-child)::before {
+  content: ""; position: absolute; left: 13px; top: 28px; bottom: -2px; width: 2px;
+  background: var(--line); transform-origin: top; transition: background 0.4s var(--ease);
+}
+.tl-node.done:not(:last-child)::before { background: var(--cinnabar); }
+.tl-stamp {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--line); background: var(--paper);
+  display: grid; place-items: center; position: relative; z-index: 1;
+  transition: border-color 0.3s var(--ease);
+}
+.tl-body { display: flex; flex-direction: column; padding-top: 2px; }
+.tl-label { font-family: var(--serif); font-size: 16px; color: var(--ink-soft); transition: color 0.3s var(--ease); }
+.tl-detail { font-size: 13px; color: var(--ink-soft); min-height: 1em; }
+
+/* states */
+.tl-node.active .tl-stamp { border-color: var(--cinnabar); }
+.tl-node.active .tl-stamp::after {
+  content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--cinnabar);
+  animation: pulse 1.2s var(--ease) infinite;
+}
+.tl-node.active .tl-label { color: var(--ink); }
+.tl-node.done .tl-stamp { border-color: var(--cinnabar); background: var(--cinnabar); }
+.tl-node.done .tl-stamp::after {
+  content: "✓"; color: #fff; font-size: 15px; line-height: 1;
+  animation: stampin 0.24s var(--ease);
+}
+.tl-node.done .tl-label { color: var(--ink); }
+.tl-node.warn .tl-stamp { border-color: var(--ochre); background: var(--ochre); }
+.tl-node.warn .tl-stamp::after { content: "!"; color: #fff; font-weight: 700; }
+.tl-node.error .tl-stamp { border-color: var(--cinnabar); background: var(--paper); }
+.tl-node.error .tl-stamp::after { content: "×"; color: var(--cinnabar); font-size: 18px; font-weight: 700; }
+.tl-node.error .tl-label { color: var(--cinnabar); }
+@keyframes pulse { 0% { transform: scale(0.7); opacity: 0.5; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.7); opacity: 0.5; } }
+@keyframes stampin { 0% { transform: scale(1.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
 /* Reading stage */
 .reading { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .export-bar {

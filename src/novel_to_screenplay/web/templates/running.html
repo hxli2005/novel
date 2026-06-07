@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}正在改编 · 墨稿{% endblock %}
+{% block content %}
+<section class="stage running" data-run-id="{{ run_id }}">
+  <h1 class="stage-title">正在改编…</h1>
+  <p class="stage-sub" id="run-elapsed">已用时 0.0s</p>
+
+  <div class="banner banner-error" id="run-error" hidden></div>
+
+  <ol class="timeline">
+    <li class="tl-node" data-stage="parse">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">解析章节</span><span class="tl-detail"></span></span>
+    </li>
+    <li class="tl-node" data-stage="analyze">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">提取人物 · 地点</span><span class="tl-detail"></span></span>
+    </li>
+    <li class="tl-node" data-stage="outline">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">规划分场</span><span class="tl-detail"></span></span>
+    </li>
+    <li class="tl-node" data-stage="generate">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">组装剧本</span><span class="tl-detail"></span></span>
+    </li>
+    <li class="tl-node" data-stage="draft">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">逐场扩写</span><span class="tl-detail"></span></span>
+    </li>
+    <li class="tl-node" data-stage="validate">
+      <span class="tl-stamp"></span>
+      <span class="tl-body"><span class="tl-label">质量校验</span><span class="tl-detail"></span></span>
+    </li>
+  </ol>
+
+  <p class="running-foot"><a href="/">取消并返回</a></p>
+</section>
+
+<script>
+  (function () {
+    var root = document.querySelector(".running");
+    if (!root) return;
+    var runId = root.getAttribute("data-run-id");
+    var nodes = {};
+    document.querySelectorAll(".tl-node").forEach(function (n) { nodes[n.getAttribute("data-stage")] = n; });
+
+    function setState(stage, state) {
+      var n = nodes[stage];
+      if (!n) return;
+      n.classList.remove("active", "done", "warn", "error");
+      if (state) n.classList.add(state);
+    }
+    function detail(stage, text) {
+      var n = nodes[stage];
+      if (n) n.querySelector(".tl-detail").textContent = text;
+    }
+
+    var started = Date.now();
+    var elapsedEl = document.getElementById("run-elapsed");
+    var timer = setInterval(function () {
+      elapsedEl.textContent = "已用时 " + ((Date.now() - started) / 1000).toFixed(1) + "s";
+    }, 100);
+
+    var es = new EventSource("/runs/" + runId + "/events");
+    var failTimer = null;
+    es.onerror = function () {
+      // The stream dropped or is unreachable. Give it a moment to auto-recover;
+      // if no event arrives, resolve to the result page instead of spinning.
+      if (failTimer) return;
+      failTimer = setTimeout(function () {
+        es.close(); clearInterval(timer);
+        window.location = "/runs/" + runId;
+      }, 4000);
+    };
+    es.onmessage = function (e) {
+      if (failTimer) { clearTimeout(failTimer); failTimer = null; }
+      var ev;
+      try { ev = JSON.parse(e.data); } catch (_) { return; }
+
+      if (ev.stage === "complete") {
+        es.close(); clearInterval(timer);
+        window.location = "/runs/" + runId;
+        return;
+      }
+      if (ev.status === "error") {
+        es.close(); clearInterval(timer);
+        setState(ev.stage, "error");
+        var b = document.getElementById("run-error");
+        b.textContent = ev.message || "转换失败，请返回重试。";
+        b.hidden = false;
+        return;
+      }
+      if (ev.status === "start") {
+        setState(ev.stage, "active");
+      } else if (ev.status === "progress" && ev.stage === "draft") {
+        setState("draft", "active");
+        detail("draft", "已扩写 " + ev.index + " / " + ev.total + " 场");
+      } else if (ev.status === "done") {
+        setState(ev.stage, "done");
+        if (ev.stage === "parse") {
+          detail("parse", "选取 " + ev.count + " 章" + (ev.total && ev.total !== ev.count ? "（原著 " + ev.total + " 章）" : ""));
+        } else if (ev.stage === "analyze") {
+          detail("analyze", (ev.characters || 0) + " 人物 · " + (ev.locations || 0) + " 地点");
+        } else if (ev.stage === "outline") {
+          detail("outline", (ev.count || 0) + " 场");
+        } else if (ev.stage === "draft") {
+          detail("draft", "完成 " + (ev.count || 0) + " 场");
+        }
+      } else if (ev.status === "fail" && ev.stage === "validate") {
+        setState("validate", "warn");
+        detail("validate", "校验有警告，可继续查看");
+      }
+    };
+  })();
+</script>
+{% endblock %}
